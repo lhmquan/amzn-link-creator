@@ -47,12 +47,13 @@ export default function LogsView(): JSX.Element {
             <th>Trạng thái</th>
             <th>Link Amazon</th>
             <th>Affiliate / Lỗi</th>
+            <th>Caption</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={4} className="muted">
+              <td colSpan={5} className="muted">
                 Chưa có nhật ký.
               </td>
             </tr>
@@ -68,6 +69,9 @@ export default function LogsView(): JSX.Element {
                 </td>
                 <td className="truncate" title={r.ok ? r.affiliateLink ?? '' : r.error ?? ''}>
                   {r.ok ? r.affiliateLink ?? '—' : r.error ?? '—'}
+                </td>
+                <td className="truncate" title={r.caption ?? ''}>
+                  {r.caption ?? '—'}
                 </td>
               </tr>
             ))

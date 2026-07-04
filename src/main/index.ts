@@ -6,6 +6,8 @@ import { registerIpc } from './ipc'
 import { browserManager } from './browser/BrowserManager'
 import { initUpdater, checkForUpdates, installUpdate } from './updater'
 import { pruneLogs } from './db/logs'
+import { createTray, getIsQuitting, setIsQuitting } from './tray'
+import { getAutoStart, setAutoStart } from './autostart'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -41,6 +43,15 @@ function createWindow(): BrowserWindow {
 
   win.on('ready-to-show', () => win.show())
 
+  // Nhấn X = thu xuống tray (không thoát). Chỉ thoát thật khi isQuitting=true
+  // (từ tray "Thoát", relaunch, update install).
+  win.on('close', (e) => {
+    if (!getIsQuitting()) {
+      e.preventDefault()
+      win.hide()
+    }
+  })
+
   win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
@@ -61,6 +72,7 @@ function registerAppIpc(): void {
   })
 
   ipcMain.handle(IpcChannels.appRelaunch, async () => {
+    setIsQuitting(true)
     await browserManager.closeProfile()
     if (!app.isPackaged || process.env['ELECTRON_RENDERER_URL']) {
       for (const win of BrowserWindow.getAllWindows()) {
@@ -82,7 +94,14 @@ function registerAppIpc(): void {
   })
 
   ipcMain.handle(IpcChannels.updateCheck, () => checkForUpdates())
-  ipcMain.handle(IpcChannels.updateInstall, () => installUpdate())
+  ipcMain.handle(IpcChannels.updateInstall, () => {
+    setIsQuitting(true)
+    installUpdate()
+  })
+
+  // Khởi động cùng Windows.
+  ipcMain.handle(IpcChannels.autoStartGet, () => getAutoStart())
+  ipcMain.handle(IpcChannels.autoStartSet, (_e, enabled: boolean) => setAutoStart(enabled))
 }
 
 app.whenReady().then(() => {
@@ -90,6 +109,7 @@ app.whenReady().then(() => {
   registerIpc()
 
   mainWindow = createWindow()
+  createTray(mainWindow)
   initUpdater()
 
   try {
@@ -109,6 +129,8 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', async (e) => {
+  // Đảm bảo đóng profile sạch trước khi thoát thật.
+  setIsQuitting(true)
   if (browserManager.isOpen()) {
     e.preventDefault()
     await browserManager.closeProfile()
@@ -116,6 +138,8 @@ app.on('before-quit', async (e) => {
   }
 })
 
+// KHÔNG tự quit khi tất cả cửa sổ đóng — app chạy nền trên tray.
+// Chỉ quit khi user bấm "Thoát" từ tray (isQuitting=true).
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  // Windows/Linux: thu xuống tray, không quit. macOS: mặc định không quit.
 })

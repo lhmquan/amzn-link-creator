@@ -1,4 +1,5 @@
-:root {
+:root,
+:root[data-theme='dark'] {
   --bg: #0f1115;
   --panel: #171a21;
   --panel-2: #1f242e;
@@ -9,10 +10,32 @@
   --accent-2: #ffb84d;
   --green: #2ecc71;
   --red: #e74c3c;
+  --console-bg: #0a0c10;
+}
+
+:root[data-theme='light'] {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --panel-2: #eef0f3;
+  --border: #d9dde3;
+  --text: #1a1d23;
+  --muted: #6b7280;
+  --accent: #e47911;
+  --accent-2: #b45f0a;
+  --green: #1e9e57;
+  --red: #d63a2b;
+  --console-bg: #1f242e;
 }
 
 * {
   box-sizing: border-box;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
 }
 
 body {
@@ -81,10 +104,85 @@ body {
   background: var(--panel-2);
   color: var(--accent);
 }
-.version {
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 4px 2px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
   padding: 8px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   color: var(--muted);
-  font-size: 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.theme-toggle:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.update-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.update-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.update-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.update-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.update-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1a1200;
+  font-weight: 600;
+}
+.version-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.up-info {
+  color: var(--accent-2);
+}
+.up-err {
+  color: var(--red);
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Content */
@@ -238,7 +336,8 @@ button.danger {
 }
 
 .console {
-  background: #0a0c10;
+  background: var(--console-bg);
+  color: #d6e0ee;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;

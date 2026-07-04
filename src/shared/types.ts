@@ -113,7 +113,10 @@ export const IpcChannels = {
 
   updateCheck: 'update:check',
   updateInstall: 'update:install',
-  updateStatus: 'update:status'
+  updateStatus: 'update:status',
+
+  autoStartGet: 'autostart:get',
+  autoStartSet: 'autostart:set'
 } as const
 
 // ---- API expose qua preload (window.amzn) ----
@@ -147,5 +150,9 @@ export interface AmznApi {
     check: () => Promise<void>
     install: () => Promise<void>
     onStatus: (cb: (status: UpdateStatusPayload) => void) => () => void
+  }
+  autoStart: {
+    get: () => Promise<boolean>
+    set: (enabled: boolean) => Promise<void>
   }
 }

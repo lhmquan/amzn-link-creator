@@ -2,6 +2,15 @@
 
 Tất cả thay đổi đáng chú ý của AMZN LINK CREATOR được ghi tại đây.
 
+## [0.3.0] - 2026-07-04
+
+### Tính năng
+- **Nút cập nhật đưa ra sidebar**: nút "Kiểm tra cập nhật" / "Cài bản mới" + trạng thái + số phiên bản nằm ở chân thanh điều hướng, luôn nhìn thấy (không còn nằm trong tab Cài đặt).
+- **Giao diện Sáng/Tối**: nút chuyển 3 chế độ (Theo hệ thống / Sáng / Tối) ở sidebar, lưu lựa chọn qua localStorage; theme "Theo hệ thống" tự đổi theo cài đặt Windows.
+- **Khởi động cùng Windows**: toggle trong tab Cài đặt → Hệ thống (chỉ hiệu lực ở bản đã đóng gói).
+- **Thu xuống khay hệ thống (tray)**: nhấn X = ẩn app vào tray thay vì thoát; chuột phải icon tray → "Hiện cửa sổ" / "Thoát". Thoát hẳn chỉ khi chọn "Thoát".
+- **Cột Caption trong Nhật ký**: hiển thị caption đã lấy được cho từng dòng.
+
 ## [0.2.0] - 2026-07-04
 
 ### Tính năng

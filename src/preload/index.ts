@@ -50,6 +50,10 @@ const api: AmznApi = {
       ipcRenderer.on(IpcChannels.updateStatus, listener)
       return () => ipcRenderer.removeListener(IpcChannels.updateStatus, listener)
     }
+  },
+  autoStart: {
+    get: () => ipcRenderer.invoke(IpcChannels.autoStartGet),
+    set: (enabled: boolean) => ipcRenderer.invoke(IpcChannels.autoStartSet, enabled)
   }
 }
 
