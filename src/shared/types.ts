@@ -1,0 +1,151 @@
+// Kiểu dữ liệu dùng chung giữa main / preload / renderer.
+
+// Một dòng Google Sheet: object cột→giá trị. Giữ nguyên để trả lại N8N.
+export type SheetRow = Record<string, unknown>
+
+export interface AppSettings {
+  webhookUrl: string // N8N endpoint (dùng cho cả fetch batch lẫn report)
+  webhookSecret: string // gửi qua header X-Amzn-Secret
+  fetchEvent: string // tên event khi gọi lấy dữ liệu (mặc định 'get_rows')
+  reportEvent: string // tên event khi báo kết quả từng dòng (mặc định 'update_row')
+  linkColumn: string // tên cột chứa link Amazon trong dòng sheet (vd 'AmazonUrl')
+  storeId: string // Store ID cần chọn/kiểm trên SiteStripe
+  trackingId: string // Tracking ID cần chọn trên SiteStripe
+  linkType: 'short' | 'full' // toggle cố định cho cả batch
+  headless: boolean // chạy ngầm khi chạy batch
+  delayMs: number // delay giữa các thao tác trên trang
+  rowDelayMs: number // delay giữa các dòng
+  pageTimeoutMs: number // timeout chờ trang Amazon load
+  logRetentionDays: number // số ngày giữ nhật ký
+}
+
+// Kết quả xử lý 1 dòng.
+export interface RowResult {
+  ok: boolean
+  affiliateLink?: string
+  caption?: string
+  error?: string // mã lỗi ngắn gọn: BROKEN_LINK | NO_GET_LINK | SITESTRIPE_NOT_FOUND | TIMEOUT | NO_URL | ...
+  step?: string
+}
+
+// Payload tiến trình broadcast tới renderer.
+export interface ProgressPayload {
+  stage: string // fetch | open | process | report | done | error | idle
+  message: string
+  busy: boolean
+  current?: number // dòng hiện tại (1-based)
+  total?: number // tổng số dòng
+  okCount?: number
+  errCount?: number
+}
+
+// Bản ghi nhật ký.
+export interface LogEntry {
+  id?: number
+  ts: number
+  ok: boolean
+  url: string | null // link Amazon của dòng
+  affiliateLink: string | null
+  caption: string | null
+  error: string | null
+  step: string | null
+}
+
+export interface LogListParams {
+  page?: number
+  pageSize?: number
+}
+
+export interface LogListResult {
+  rows: LogEntry[]
+  total: number
+}
+
+export interface WebhookTestResult {
+  ok: boolean
+  status?: number
+  rowCount?: number
+  error?: string
+}
+
+export interface BatchSummary {
+  ok: boolean
+  total: number
+  okCount: number
+  errCount: number
+  error?: string
+}
+
+export interface AppInfo {
+  name: string
+  version: string
+}
+
+export interface UpdateStatusPayload {
+  status: 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+  message?: string
+  version?: string
+  percent?: number
+}
+
+// ---- IPC channels ----
+export const IpcChannels = {
+  getAppInfo: 'app:getInfo',
+  appRelaunch: 'app:relaunch',
+  pickFolder: 'app:pickFolder',
+
+  settingsGet: 'settings:get',
+  settingsSave: 'settings:save',
+
+  browserOpen: 'browser:open',
+  browserClose: 'browser:close',
+  browserStatus: 'browser:status',
+  browserStatusChanged: 'browser:statusChanged',
+
+  batchStart: 'batch:start',
+  batchStop: 'batch:stop',
+  taskProgress: 'task:progress',
+
+  webhookTest: 'webhook:test',
+
+  logsList: 'logs:list',
+  logsClear: 'logs:clear',
+
+  updateCheck: 'update:check',
+  updateInstall: 'update:install',
+  updateStatus: 'update:status'
+} as const
+
+// ---- API expose qua preload (window.amzn) ----
+export interface AmznApi {
+  getAppInfo: () => Promise<AppInfo>
+  relaunch: () => Promise<void>
+  pickFolder: () => Promise<string | null>
+  settings: {
+    get: () => Promise<AppSettings>
+    save: (patch: Partial<AppSettings>) => Promise<AppSettings>
+  }
+  browser: {
+    open: () => Promise<void>
+    close: () => Promise<void>
+    status: () => Promise<{ open: boolean }>
+    onStatusChanged: (cb: (open: boolean) => void) => () => void
+  }
+  batch: {
+    start: () => Promise<BatchSummary>
+    stop: () => Promise<void>
+    onProgress: (cb: (p: ProgressPayload) => void) => () => void
+  }
+  webhook: {
+    test: () => Promise<WebhookTestResult>
+  }
+  logs: {
+    list: (params?: LogListParams) => Promise<LogListResult>
+    clear: () => Promise<void>
+  }
+  update: {
+    check: () => Promise<void>
+    install: () => Promise<void>
+    onStatus: (cb: (status: UpdateStatusPayload) => void) => () => void
+  }
+}
