@@ -1,5 +1,6 @@
-import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, nativeImage } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
 import { IpcChannels, type AppInfo } from '../shared/types'
 import { registerIpc } from './ipc'
 import { browserManager } from './browser/BrowserManager'
@@ -8,7 +9,19 @@ import { pruneLogs } from './db/logs'
 
 let mainWindow: BrowserWindow | null = null
 
+// Icon app: khi đóng gói nằm trong resources; khi dev nằm ở build/.
+function getAppIcon(): Electron.NativeImage | undefined {
+  const iconPath = app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(__dirname, '../../build/icon.png')
+  if (existsSync(iconPath)) {
+    return nativeImage.createFromPath(iconPath)
+  }
+  return undefined
+}
+
 function createWindow(): BrowserWindow {
+  const icon = getAppIcon()
   const win = new BrowserWindow({
     width: 1180,
     height: 780,
@@ -17,6 +30,7 @@ function createWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     title: 'AMZN LINK CREATOR',
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

@@ -1,6 +1,6 @@
 {
   "name": "amzn-link-creator",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tự động lấy affiliate link + caption từ Amazon SiteStripe, điều khiển bởi N8N/Google Sheet",
   "private": true,
   "author": "",
@@ -50,14 +50,23 @@
     "files": [
       "out/**"
     ],
+    "extraResources": [
+      { "from": "build/icon.png", "to": "icon.png" }
+    ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": true,
       "perMachine": false,
       "allowToChangeInstallationDirectory": false,
       "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "lhmquan",
+      "repo": "amzn-link-creator"
     }
   }
 }

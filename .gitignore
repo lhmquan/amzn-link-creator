@@ -6,9 +6,13 @@ pnpm-debug.log*
 
 # Build output
 dist/
-build/
 out/
 *.tsbuildinfo
+
+# build/ chứa resources đóng gói (icon) — chỉ giữ icon, bỏ qua phần còn lại
+build/*
+!build/icon.png
+!build/icon.svg
 
 # Dữ liệu nhạy cảm - KHÔNG commit
 data/profiles/

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Save, Globe, ExternalLink, XCircle } from 'lucide-react'
-import type { AppSettings, WebhookTestResult } from '@shared/types'
+import { Save, Globe, ExternalLink, XCircle, RefreshCw, Download } from 'lucide-react'
+import type { AppSettings, WebhookTestResult, AppInfo, UpdateStatusPayload } from '@shared/types'
 
 export default function SettingsView(): JSX.Element {
   const [s, setS] = useState<AppSettings | null>(null)
@@ -9,12 +9,23 @@ export default function SettingsView(): JSX.Element {
   const [browserOpen, setBrowserOpen] = useState(false)
   const [testResult, setTestResult] = useState<WebhookTestResult | null>(null)
   const [testing, setTesting] = useState(false)
+  const [info, setInfo] = useState<AppInfo | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatusPayload | null>(null)
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
 
   useEffect(() => {
     window.amzn.settings.get().then(setS).catch(() => {})
     window.amzn.browser.status().then((r) => setBrowserOpen(r.open)).catch(() => {})
-    const off = window.amzn.browser.onStatusChanged((open) => setBrowserOpen(open))
-    return off
+    window.amzn.getAppInfo().then(setInfo).catch(() => {})
+    const offBrowser = window.amzn.browser.onStatusChanged((open) => setBrowserOpen(open))
+    const offUpdate = window.amzn.update.onStatus((st) => {
+      setUpdateStatus(st)
+      if (st.status !== 'checking' && st.status !== 'downloading') setCheckingUpdate(false)
+    })
+    return () => {
+      offBrowser()
+      offUpdate()
+    }
   }, [])
 
   if (!s) return <div className="view">Đang tải…</div>
@@ -45,6 +56,43 @@ export default function SettingsView(): JSX.Element {
       setTesting(false)
     }
   }
+
+  const checkUpdate = async (): Promise<void> => {
+    setCheckingUpdate(true)
+    setUpdateStatus({ status: 'checking' })
+    try {
+      await window.amzn.update.check()
+    } catch (e) {
+      setUpdateStatus({ status: 'error', message: (e as Error).message })
+      setCheckingUpdate(false)
+    }
+  }
+
+  const installUpdate = (): void => {
+    window.amzn.update.install().catch(() => {})
+  }
+
+  // Diễn giải trạng thái cập nhật thành text tiếng Việt.
+  const updateText = (): string => {
+    if (!updateStatus) return ''
+    switch (updateStatus.status) {
+      case 'checking':
+        return 'Đang kiểm tra…'
+      case 'available':
+        return `Có bản mới ${updateStatus.version ?? ''} — đang tải…`
+      case 'not-available':
+        return updateStatus.message ?? 'Bạn đang dùng bản mới nhất.'
+      case 'downloading':
+        return `Đang tải bản mới… ${updateStatus.percent ?? 0}%`
+      case 'downloaded':
+        return `Đã tải xong bản ${updateStatus.version ?? ''}. Bấm Cài đặt để khởi động lại.`
+      case 'error':
+        return `Lỗi cập nhật: ${updateStatus.message ?? 'không xác định'}`
+      default:
+        return ''
+    }
+  }
+  const canInstall = updateStatus?.status === 'downloaded'
 
   return (
     <div className="view">
@@ -152,6 +200,27 @@ export default function SettingsView(): JSX.Element {
         </button>
         {savedAt && <span className="muted">Đã lưu lúc {new Date(savedAt).toLocaleTimeString('vi-VN')}</span>}
       </div>
+
+      <section className="card">
+        <h2>Cập nhật ứng dụng</h2>
+        <p className="muted">Phiên bản hiện tại: {info ? `v${info.version}` : '—'}</p>
+        <div className="row">
+          {canInstall ? (
+            <button className="primary" onClick={installUpdate}>
+              <Download size={16} /> Cài đặt & khởi động lại
+            </button>
+          ) : (
+            <button onClick={checkUpdate} disabled={checkingUpdate}>
+              <RefreshCw size={16} /> {checkingUpdate ? 'Đang kiểm tra…' : 'Kiểm tra cập nhật'}
+            </button>
+          )}
+          {updateStatus && (
+            <span className={updateStatus.status === 'error' ? 'badge off' : 'muted'}>
+              {updateText()}
+            </span>
+          )}
+        </div>
+      </section>
     </div>
   )
 }

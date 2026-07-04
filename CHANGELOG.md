@@ -2,6 +2,17 @@
 
 Tất cả thay đổi đáng chú ý của AMZN LINK CREATOR được ghi tại đây.
 
+## [0.2.0] - 2026-07-04
+
+### Tính năng
+- **Logo + icon** cho app (hiển thị ở cửa sổ + installer). SVG nguồn tại `build/icon.svg`, PNG 512x512 tại `build/icon.png`.
+- **Nút cập nhật** trong tab Cài đặt: hiển thị phiên bản hiện tại, "Kiểm tra cập nhật", tải bản mới tự động, "Cài đặt & khởi động lại".
+- **Cấu hình auto-update**: `build.publish` GitHub (`lhmquan/amzn-link-creator`) + electron-updater — cho phép `npm run release` phát hành bản cập nhật.
+
+### Sửa lỗi
+- Fix native module: thêm script `postinstall: electron-builder install-app-deps` để `better-sqlite3` rebuild đúng ABI Electron sau `npm install`.
+- Automation SiteStripe theo DOM thật (Enhanced Flow T1): đọc affiliate link + caption qua nút Copy → clipboard; radio Short/Full; thêm mã lỗi `EXCLUDED_PRODUCT`, `LINK_GEN_FAILED`, `NO_POPOVER`, `NO_COPY_BTN`.
+
 ## [0.1.0] - 2026-07-04
 
 Phiên bản đầu tiên.
