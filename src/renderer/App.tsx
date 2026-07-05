@@ -3,6 +3,8 @@ import {
   Settings as SettingsIcon,
   Play,
   ScrollText,
+  Rss,
+  Barcode,
   RefreshCw,
   Download,
   Sun,
@@ -12,9 +14,11 @@ import {
 import SettingsView from './views/SettingsView'
 import RunView from './views/RunView'
 import LogsView from './views/LogsView'
+import SourceView from './views/SourceView'
+import AsinView from './views/AsinView'
 import type { AppInfo, UpdateStatusPayload } from '@shared/types'
 
-type Tab = 'run' | 'settings' | 'logs'
+type Tab = 'run' | 'source' | 'asin' | 'settings' | 'logs'
 type Theme = 'system' | 'light' | 'dark'
 
 const THEME_ICON: Record<Theme, typeof Sun> = {
@@ -128,6 +132,18 @@ export default function App(): JSX.Element {
             <Play size={18} /> Chạy
           </button>
           <button
+            className={tab === 'source' ? 'nav-item active' : 'nav-item'}
+            onClick={() => setTab('source')}
+          >
+            <Rss size={18} /> Lấy nguồn
+          </button>
+          <button
+            className={tab === 'asin' ? 'nav-item active' : 'nav-item'}
+            onClick={() => setTab('asin')}
+          >
+            <Barcode size={18} /> Get ASIN
+          </button>
+          <button
             className={tab === 'settings' ? 'nav-item active' : 'nav-item'}
             onClick={() => setTab('settings')}
           >
@@ -164,6 +180,8 @@ export default function App(): JSX.Element {
 
       <main className="content">
         {tab === 'run' && <RunView />}
+        {tab === 'source' && <SourceView />}
+        {tab === 'asin' && <AsinView />}
         {tab === 'settings' && <SettingsView />}
         {tab === 'logs' && <LogsView />}
       </main>

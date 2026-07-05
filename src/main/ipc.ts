@@ -1,9 +1,9 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { IpcChannels, type AppSettings, type LogListParams } from '../shared/types'
-import { getAllSettings, saveSettings } from './db/settings'
+import { getAllSettings, saveSettings, getRecentSubreddits } from './db/settings'
 import { listLogs, clearLogs } from './db/logs'
 import { browserManager } from './browser/BrowserManager'
-import { testWebhook } from './n8n/N8nConnector'
+import { testWebhook, fetchSource, fetchAsin } from './n8n/N8nConnector'
 import { runBatch, stopBatch } from './runner/BatchRunner'
 
 // Broadcast trạng thái browser (đóng cửa sổ thủ công…) tới renderer.
@@ -36,6 +36,13 @@ export function registerIpc(): void {
 
   // ---- Webhook test ----
   ipcMain.handle(IpcChannels.webhookTest, () => testWebhook())
+
+  // ---- Lấy nguồn (subreddit) ----
+  ipcMain.handle(IpcChannels.sourceFetch, (_e, subreddit: string) => fetchSource(subreddit))
+  ipcMain.handle(IpcChannels.sourceRecents, () => getRecentSubreddits())
+
+  // ---- Get ASIN ----
+  ipcMain.handle(IpcChannels.asinFetch, () => fetchAsin())
 
   // ---- Logs ----
   ipcMain.handle(IpcChannels.logsList, (_e, params?: LogListParams) => listLogs(params))

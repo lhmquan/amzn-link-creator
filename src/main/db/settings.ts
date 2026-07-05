@@ -6,6 +6,8 @@ const DEFAULTS: AppSettings = {
   webhookSecret: '',
   fetchEvent: 'get_rows',
   reportEvent: 'update_row',
+  sourceEvent: 'get_source',
+  asinEvent: 'get_asin',
   linkColumn: 'AmazonUrl',
   storeId: '',
   trackingId: '',
@@ -28,6 +30,8 @@ export function getAllSettings(): AppSettings {
     webhookSecret: map.get('webhookSecret') ?? DEFAULTS.webhookSecret,
     fetchEvent: map.get('fetchEvent') ?? DEFAULTS.fetchEvent,
     reportEvent: map.get('reportEvent') ?? DEFAULTS.reportEvent,
+    sourceEvent: map.get('sourceEvent') ?? DEFAULTS.sourceEvent,
+    asinEvent: map.get('asinEvent') ?? DEFAULTS.asinEvent,
     linkColumn: map.get('linkColumn') ?? DEFAULTS.linkColumn,
     storeId: map.get('storeId') ?? DEFAULTS.storeId,
     trackingId: map.get('trackingId') ?? DEFAULTS.trackingId,
@@ -42,6 +46,37 @@ export function getAllSettings(): AppSettings {
       ? Number(map.get('logRetentionDays'))
       : DEFAULTS.logRetentionDays
   }
+}
+
+const RECENTS_KEY = 'sourceRecents'
+const RECENTS_MAX = 10
+
+// Danh sách subreddit gần đây (lưu JSON array trong bảng settings, mới nhất đứng đầu).
+export function getRecentSubreddits(): string[] {
+  const row = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(RECENTS_KEY) as
+    | { value: string }
+    | undefined
+  if (!row) return []
+  try {
+    const arr = JSON.parse(row.value)
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+// Thêm 1 subreddit vào đầu danh sách gần đây (khử trùng không phân biệt hoa/thường).
+export function addRecentSubreddit(name: string): string[] {
+  const trimmed = name.trim()
+  if (!trimmed) return getRecentSubreddits()
+  const current = getRecentSubreddits().filter((s) => s.toLowerCase() !== trimmed.toLowerCase())
+  const next = [trimmed, ...current].slice(0, RECENTS_MAX)
+  getDb()
+    .prepare(
+      'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+    )
+    .run(RECENTS_KEY, JSON.stringify(next))
+  return next
 }
 
 export function saveSettings(patch: Partial<AppSettings>): AppSettings {

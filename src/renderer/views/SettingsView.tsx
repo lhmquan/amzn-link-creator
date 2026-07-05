@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react'
 import { Save, Globe, ExternalLink, XCircle } from 'lucide-react'
 import type { AppSettings, WebhookTestResult } from '@shared/types'
 
+// Settings lưu delay/timeout bằng ms; UI hiển thị & nhập bằng giây cho dễ thiết lập.
+const msToSec = (ms: number): number => Math.round((ms / 1000) * 100) / 100
+const secToMs = (sec: string): number => Math.max(0, Math.round(Number(sec) * 1000))
+
 export default function SettingsView(): JSX.Element {
   const [s, setS] = useState<AppSettings | null>(null)
   const [saving, setSaving] = useState(false)
@@ -88,7 +92,7 @@ export default function SettingsView(): JSX.Element {
           Webhook Secret (tùy chọn — gửi qua header X-Amzn-Secret)
           <input value={s.webhookSecret} onChange={(e) => set('webhookSecret', e.target.value)} type="password" />
         </label>
-        <div className="grid2">
+        <div className="grid3">
           <label>
             Tên event lấy dữ liệu
             <input value={s.fetchEvent} onChange={(e) => set('fetchEvent', e.target.value)} />
@@ -96,6 +100,14 @@ export default function SettingsView(): JSX.Element {
           <label>
             Tên event báo kết quả
             <input value={s.reportEvent} onChange={(e) => set('reportEvent', e.target.value)} />
+          </label>
+          <label>
+            Tên event lấy nguồn
+            <input value={s.sourceEvent} onChange={(e) => set('sourceEvent', e.target.value)} />
+          </label>
+          <label>
+            Tên event Get ASIN
+            <input value={s.asinEvent} onChange={(e) => set('asinEvent', e.target.value)} />
           </label>
         </div>
         <div className="row">
@@ -139,16 +151,34 @@ export default function SettingsView(): JSX.Element {
         </label>
         <div className="grid3">
           <label>
-            Delay giữa thao tác (ms)
-            <input type="number" value={s.delayMs} onChange={(e) => set('delayMs', Number(e.target.value))} />
+            Delay giữa thao tác (giây)
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              value={msToSec(s.delayMs)}
+              onChange={(e) => set('delayMs', secToMs(e.target.value))}
+            />
           </label>
           <label>
-            Delay giữa các dòng (ms)
-            <input type="number" value={s.rowDelayMs} onChange={(e) => set('rowDelayMs', Number(e.target.value))} />
+            Delay giữa các dòng (giây)
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              value={msToSec(s.rowDelayMs)}
+              onChange={(e) => set('rowDelayMs', secToMs(e.target.value))}
+            />
           </label>
           <label>
-            Timeout tải trang (ms)
-            <input type="number" value={s.pageTimeoutMs} onChange={(e) => set('pageTimeoutMs', Number(e.target.value))} />
+            Timeout tải trang (giây)
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              value={msToSec(s.pageTimeoutMs)}
+              onChange={(e) => set('pageTimeoutMs', secToMs(e.target.value))}
+            />
           </label>
         </div>
       </section>

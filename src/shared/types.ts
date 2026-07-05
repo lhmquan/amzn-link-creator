@@ -8,6 +8,8 @@ export interface AppSettings {
   webhookSecret: string // gửi qua header X-Amzn-Secret
   fetchEvent: string // tên event khi gọi lấy dữ liệu (mặc định 'get_rows')
   reportEvent: string // tên event khi báo kết quả từng dòng (mặc định 'update_row')
+  sourceEvent: string // tên event khi lấy nguồn từ subreddit (mặc định 'get_source')
+  asinEvent: string // tên event khi bóc link gốc Amazon có ASIN (mặc định 'get_asin')
   linkColumn: string // tên cột chứa link Amazon trong dòng sheet (vd 'AmazonUrl')
   storeId: string // Store ID cần chọn/kiểm trên SiteStripe
   trackingId: string // Tracking ID cần chọn trên SiteStripe
@@ -68,6 +70,22 @@ export interface WebhookTestResult {
   error?: string
 }
 
+// Kết quả gửi yêu cầu "Lấy nguồn" (subreddit) — N8N xử lý phía sau rồi respond lại.
+export interface SourceResult {
+  ok: boolean
+  count?: number // số nguồn N8N trả về xử lý được
+  message?: string // thông báo N8N trả về (thành công/thất bại)
+  error?: string
+}
+
+// Kết quả kích hoạt luồng "Get ASIN" — N8N bóc link gốc Amazon có ASIN từ dữ liệu reddit.
+export interface AsinResult {
+  ok: boolean
+  count?: number // số ASIN/link N8N trả về xử lý được
+  message?: string
+  error?: string
+}
+
 export interface BatchSummary {
   ok: boolean
   total: number
@@ -108,6 +126,11 @@ export const IpcChannels = {
 
   webhookTest: 'webhook:test',
 
+  sourceFetch: 'source:fetch',
+  sourceRecents: 'source:recents',
+
+  asinFetch: 'asin:fetch',
+
   logsList: 'logs:list',
   logsClear: 'logs:clear',
 
@@ -141,6 +164,13 @@ export interface AmznApi {
   }
   webhook: {
     test: () => Promise<WebhookTestResult>
+  }
+  source: {
+    fetch: (subreddit: string) => Promise<SourceResult>
+    recents: () => Promise<string[]>
+  }
+  asin: {
+    fetch: () => Promise<AsinResult>
   }
   logs: {
     list: (params?: LogListParams) => Promise<LogListResult>

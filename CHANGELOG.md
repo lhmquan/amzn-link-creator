@@ -2,6 +2,17 @@
 
 Tất cả thay đổi đáng chú ý của AMZN LINK CREATOR được ghi tại đây.
 
+## [0.4.0] - 2026-07-05
+
+### Tính năng
+- **Tab "Lấy nguồn"**: nhập tên subreddit → gửi webhook N8N (event `get_source`, kèm `subreddit`); đọc respond để báo số nguồn lấy được. Nhớ danh sách subreddit gần đây (tối đa 10, lưu trong DB) để chọn lại nhanh bằng chip `r/<tên>`.
+- **Tab "Get ASIN"**: bấm Chạy → gửi webhook N8N (event `get_asin`) kích hoạt luồng bóc link gốc Amazon có ASIN từ dữ liệu reddit; đọc respond để báo kết quả. Nhận dạng respond `[{ "success": true }]` là "N8N đã xử lý xong".
+- **Cấu hình tên event mới** trong Cài đặt → Webhook N8N: "Tên event lấy nguồn" (`get_source`) và "Tên event Get ASIN" (`get_asin`).
+
+### Cải tiến
+- **Cài đặt delay/timeout đổi sang giây**: 3 ô Delay giữa thao tác / Delay giữa các dòng / Timeout tải trang giờ nhập bằng giây (bước 0.1s) cho dễ thiết lập; vẫn lưu ms bên dưới nên logic batch không đổi.
+- **Thông báo lỗi webhook gọn hơn**: gặp timeout Cloudflare (524/504) hoặc body HTML thì hiện câu ngắn dễ hiểu thay vì đổ nguyên trang lỗi.
+
 ## [0.3.0] - 2026-07-04
 
 ### Tính năng
