@@ -2,6 +2,12 @@
 
 Tất cả thay đổi đáng chú ý của AMZN LINK CREATOR được ghi tại đây.
 
+## [0.4.1] - 2026-07-10
+
+### Sửa lỗi
+- **Bám theo giao diện SiteStripe mới**: giao diện mới bỏ nút "Copy affiliate link", link hiện sẵn trong ô textarea (`#amzn-ss-text-shortlink-textarea` / `#amzn-ss-text-fulllink-textarea`). App thử nút copy trước (giao diện cũ) rồi fallback đọc trực tiếp link trong textarea theo loại link đã chọn, chờ tới khi spinner tắt và value là URL.
+- **Tạo lại link sau khi đổi Tracking ID**: đổi Tracking/Store ID khiến Amazon xoá link trong ô text và bật lại nút "Get Link" trong popover. App phát hiện thông báo update / nút Get Link được bật và bấm lại để sinh link mới trước khi đọc — khắc phục lỗi ô text bị clear trắng làm dòng bị treo rồi bỏ qua.
+
 ## [0.4.0] - 2026-07-05
 
 ### Tính năng
