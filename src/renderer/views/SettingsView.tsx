@@ -166,11 +166,11 @@ export default function SettingsView(): JSX.Element {
           Chạy ngầm khi chạy batch
         </label>
         <p className="muted">
-          Chạy ngầm vẫn mở Chrome thật nhưng đẩy cửa sổ ra ngoài màn hình để bạn không thấy —
-          hành vi giống hệt lúc tự mở cửa sổ. Nếu gặp nhiều lỗi NO_POPOVER liên tiếp, Amazon
-          đang giới hạn tần suất tạo link: hãy tăng "Delay giữa các dòng" và chạy lại sau ít
-          phút. Ảnh chụp và HTML của trang lỗi được lưu trong thư mục <code>logs</code> của app
-          (đường dẫn hiện ở cột lỗi trong Nhật ký).
+          Chạy ngầm dùng Chrome headless: không cửa sổ, không icon dưới taskbar, không hiện khi
+          Alt-Tab. Nếu bạn vừa bấm "Mở profile để đăng nhập" thì app sẽ đóng cửa sổ đó và mở lại
+          ngầm khi bắt đầu batch (đăng nhập được giữ trong profile nên không phải nhập lại). Ảnh
+          chụp và HTML của trang lỗi được lưu trong thư mục <code>logs</code> của app (đường dẫn
+          hiện ở cột lỗi trong Nhật ký).
         </p>
         <div className="grid3">
           <label>

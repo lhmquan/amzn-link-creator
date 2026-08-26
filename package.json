@@ -1,6 +1,6 @@
 {
   "name": "amzn-link-creator",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Tự động lấy affiliate link từ Amazon SiteStripe + sinh caption bằng AI, điều khiển bởi N8N/Google Sheet",
   "private": true,
   "author": "",

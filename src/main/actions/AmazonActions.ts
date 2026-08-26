@@ -65,6 +65,15 @@ const SEL_GET_LINK = [
 ]
 // Popover "Share affiliate link" sau khi bấm Get Link.
 const SEL_POPOVER = '.a-popover-content'
+// Hai hộp rỗng mà SiteStripe tự điền nội dung sau khi trang tải xong ("hydrate"):
+// toolbar động và TOÀN BỘ HTML của các popover. Amazon trả chúng qua AJAX
+// /creators/links/render/ss. Cả hai còn rỗng nghĩa là bar chỉ là vỏ tĩnh, nút Get Link
+// KHÔNG có event listener nào -> bấm bao nhiêu lần cũng không mở được popover.
+const SEL_SS_DYNAMIC = '#amzn-ss-dynamic-content'
+const SEL_SS_FLYOUT = '#amzn-ss-flyout-content'
+// Endpoint SiteStripe gọi để lấy toolbar + popover. Hết hạn đăng nhập Associates thì
+// endpoint này trả 302 về /ap/signin nên trang không bao giờ hydrate.
+const SS_RENDER_PATH = '/creators/links/render/ss'
 // Dropdown Tracking ID (select gốc).
 const SEL_TRACKING_SELECT = '#amzn-ss-tracking-id-dropdown-text'
 // Radio Short / Full (bấm vào span có data-action tương ứng).
@@ -282,6 +291,29 @@ async function isInnerGetLinkEnabled(page: Page): Promise<boolean> {
   return !disabled
 }
 
+// Chờ SiteStripe hydrate: Amazon trả toolbar + HTML popover qua AJAX /creators/links/render/ss
+// rồi nhét vào #amzn-ss-dynamic-content và #amzn-ss-flyout-content. Trước khi hydrate xong,
+// bar chỉ là vỏ HTML tĩnh: nút "Get Link" KHÔNG có event listener nào (đã đo bằng CDP
+// DOMDebugger.getEventListeners: 0 listener) nên bấm bao nhiêu lần cũng vô ích.
+// Trả về true khi ít nhất một trong hai hộp đã có nội dung.
+async function waitSiteStripeHydrated(page: Page, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const filled = await page
+      .evaluate(
+        `(function(){
+          var d = document.querySelector('${SEL_SS_DYNAMIC}');
+          var f = document.querySelector('${SEL_SS_FLYOUT}');
+          return (d ? d.innerHTML.length : 0) > 0 || (f ? f.innerHTML.length : 0) > 0;
+        })()`
+      )
+      .catch(() => false)
+    if (filled === true) return true
+    await sleep(400)
+  }
+  return false
+}
+
 // Đọc tên sản phẩm trên trang chi tiết Amazon (biến {title} cho prompt AI).
 // Thử lần lượt các selector; fallback cuối là <title> của trang (đã cắt hậu tố "- Amazon.com").
 async function readProductTitle(page: Page): Promise<string> {
@@ -325,6 +357,33 @@ async function runOne(
 ): Promise<RowResult> {
   const page = context.pages()[0] ?? (await context.newPage())
 
+  // Theo dõi AJAX /creators/links/render/ss của SiteStripe. Khi cookie Associates hết hạn,
+  // endpoint này trả 302 về /ap/signin: bar vẫn hiện (vỏ tĩnh do server render) nhưng KHÔNG
+  // bao giờ hydrate, nút Get Link không có listener nên bấm không mở popover và trang cũng
+  // không hiện thông báo lỗi nào. Bắt tại đây để báo đúng lỗi thay vì NO_POPOVER mơ hồ.
+  let ssRenderRedirected = false
+  const onResponse = (resp: { url(): string; status(): number }): void => {
+    if (!resp.url().includes(SS_RENDER_PATH)) return
+    const status = resp.status()
+    if (status >= 300 && status < 400) ssRenderRedirected = true
+  }
+  page.on('response', onResponse)
+  try {
+    return await runOneInner(page, url, settings, report, info, () => ssRenderRedirected)
+  } finally {
+    page.off('response', onResponse)
+  }
+}
+
+async function runOneInner(
+  page: Page,
+  url: string,
+  settings: AppSettings,
+  report: StepReporter,
+  info: { productTitle: string },
+  ssRedirected: () => boolean
+): Promise<RowResult> {
+
   // 1. Điều hướng + kiểm tra link.
   report('Đang mở link Amazon…')
   try {
@@ -363,6 +422,29 @@ async function runOne(
   }
   if (!hasBar) {
     return { ok: false, error: 'SITESTRIPE_NOT_FOUND', step: 'Chưa đăng nhập Associates?' }
+  }
+
+  // 2b. Chờ SiteStripe hydrate xong. Bar hiện KHÔNG có nghĩa là dùng được: phần vỏ do server
+  // render sẵn, còn toolbar + popover được nhét vào sau bằng AJAX. Bấm trước khi hydrate thì
+  // nút chưa có listener và popover không bao giờ mở.
+  report('Đang chờ SiteStripe sẵn sàng…')
+  const hydrated = await waitSiteStripeHydrated(page, settings.pageTimeoutMs)
+  if (!hydrated) {
+    const shot = await dumpFailure(page, 'ss_not_hydrated')
+    // Nguyên nhân đã xác minh: cookie Associates hết hạn -> /creators/links/render/ss trả 302
+    // về /ap/signin. Bar vẫn hiện nên không thể phát hiện bằng cách tìm bar.
+    if (ssRedirected()) {
+      return {
+        ok: false,
+        error: 'ASSOCIATES_SESSION_EXPIRED',
+        step: `Phiên Associates đã hết hạn (Amazon chuyển ${SS_RENDER_PATH} về trang đăng nhập) — bấm "Mở profile để đăng nhập" và đăng nhập lại · ${shot}`
+      }
+    }
+    return {
+      ok: false,
+      error: 'SITESTRIPE_NOT_READY',
+      step: `SiteStripe không nạp xong toolbar/popover trong ${Math.round(settings.pageTimeoutMs / 1000)}s · ${shot}`
+    }
   }
 
   // 3 + 4. Bấm Get Link để mở popover "Share affiliate link".
@@ -404,14 +486,17 @@ async function runOne(
   }
   if (!popoverOpen) {
     const shot = await dumpFailure(page, 'no_popover')
-    // Amazon giới hạn tần suất tạo link: khi bị siết, bấm "Get Link" không mở popover và
-    // cũng KHÔNG có thông báo lỗi nào trên trang. Đã đo: lúc đó cả chế độ hiện cửa sổ lẫn
-    // chạy ngầm đều không mở được; nghỉ một lúc thì hoạt động lại. Nêu rõ trong step để
-    // user biết cần tăng "Delay giữa các dòng" chứ không phải lỗi selector.
+    if (ssRedirected()) {
+      return {
+        ok: false,
+        error: 'ASSOCIATES_SESSION_EXPIRED',
+        step: `Phiên Associates đã hết hạn (Amazon chuyển ${SS_RENDER_PATH} về trang đăng nhập) — bấm "Mở profile để đăng nhập" và đăng nhập lại · ${shot}`
+      }
+    }
     return {
       ok: false,
       error: 'NO_POPOVER',
-      step: `Popover không mở sau ${POPOVER_TRIES} lần bấm (Amazon có thể đang giới hạn tần suất — thử tăng delay giữa các dòng) · ${shot}`
+      step: `Popover không mở sau ${POPOVER_TRIES} lần bấm · ${shot}`
     }
   }
   await sleep(settings.delayMs)

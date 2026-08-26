@@ -2,6 +2,20 @@
 
 Tất cả thay đổi đáng chú ý của AMZN LINK CREATOR được ghi tại đây.
 
+## [0.5.3] - 2026-08-26
+
+### Sửa lỗi
+- **Phát hiện phiên Associates hết hạn thay vì báo `NO_POPOVER` mơ hồ**: SiteStripe Bar trên trang chỉ là vỏ HTML tĩnh do server render; toolbar và toàn bộ HTML popover được nạp sau bằng AJAX `GET /creators/links/render/ss` rồi nhét vào `#amzn-ss-dynamic-content` và `#amzn-ss-flyout-content`. Khi cookie Associates hết hạn, request này trả 302 về `/ap/signin` nên hai hộp đó rỗng mãi và nút "Get Link" KHÔNG có event listener nào (đã đo bằng CDP `DOMDebugger.getEventListeners`: 0 listener) — bấm bao nhiêu lần cũng không mở popover, trang cũng không hiện bất kỳ thông báo lỗi nào. App giờ theo dõi request này và báo `ASSOCIATES_SESSION_EXPIRED` kèm hướng dẫn bấm "Mở profile để đăng nhập".
+- **Chờ SiteStripe nạp xong trước khi bấm "Get Link"**: thấy bar KHÔNG có nghĩa là dùng được. Không nạp xong trong `pageTimeoutMs` mà cũng không bị chuyển hướng đăng nhập thì báo `SITESTRIPE_NOT_READY`.
+- **Chạy ngầm ẩn hoàn toàn trở lại**: dùng đúng Chrome headless — không cửa sổ, không icon dưới taskbar, không hiện khi Alt-Tab. Hai cách thử ở v0.5.2 đều KHÔNG ẩn thật: đẩy cửa sổ ra toạ độ âm thì Chrome kẹp toạ độ lại (truyền `-32000` báo về `-26214`) và cửa sổ vẫn còn trong taskbar; thu nhỏ (minimized) vẫn là cửa sổ thật nên vẫn có icon. Đã đo bằng cách đếm tiến trình Chrome có cửa sổ thật: headless = 0 cửa sổ, headful = 1 cửa sổ.
+- **"Chạy ngầm" không còn bị vô hiệu sau khi mở profile để đăng nhập**: `headless` là tham số lúc launch Chrome, không đổi được sau đó, nhưng batch lại dùng lại context đang mở (luôn headful) nên cờ chạy ngầm bị bỏ qua — đây là lý do Chrome vẫn hiện dù đã tick "Chạy ngầm". Batch giờ mở lại Chrome đúng chế độ; session nằm trong profile trên đĩa nên không phải đăng nhập lại.
+
+### Cải chính
+- Kết luận ở v0.5.1 ("headless làm cửa sổ quá hẹp nên popover không mở") và ở v0.5.2 ("Amazon giới hạn tần suất tạo link") đều SAI. Nguyên nhân thật của `NO_POPOVER` là phiên Associates hết hạn. Đã đo lại khi phiên còn hạn: cả headless, headful, cửa sổ ngoài màn hình và cửa sổ thu nhỏ đều lấy được link như nhau. Thông báo lỗi không còn gợi ý tăng "Delay giữa các dòng" nữa.
+
+### Cải tiến
+- Bỏ bong bóng "Restore pages? Chrome didn't shut down correctly" (`--hide-crash-restore-bubble`) — nó xuất hiện sau khi tiến trình Chrome cũ bị kill và che mất SiteStripe Bar.
+
 ## [0.5.2] - 2026-08-26
 
 ### Sửa lỗi

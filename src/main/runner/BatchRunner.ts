@@ -92,13 +92,15 @@ export async function runBatch(): Promise<BatchSummary> {
       return { ok: true, total: 0, okCount: 0, errCount: 0 }
     }
 
-    // 2. Mở profile (headless theo settings).
+    // 2. Mở profile đúng chế độ. Dùng ensureMode chứ không phải getContext(): headless là
+    // tham số lúc launch Chrome, không đổi được sau đó. Nếu user vừa bấm "Mở profile để đăng
+    // nhập" (luôn headful) rồi bật "Chạy ngầm" và bấm "Bắt đầu", context sẵn có là headful
+    // nên phải mở lại Chrome ở chế độ headless, nếu không cửa sổ vẫn hiện.
     emitProgress({ stage: 'open', message: 'Đang mở trình duyệt…', busy: true, total })
-    let context = browserManager.getContext()
-    if (!context) {
-      context = await browserManager.openProfile({ headless: settings.headless, startUrl: 'about:blank' })
-      openedByUs = true
-    }
+    // Batch tự đóng Chrome ở cuối khi CHÍNH NÓ mở — tức là chưa có context, hoặc context sẵn
+    // có sai chế độ nên phải mở lại. Context đúng chế độ do user mở thì giữ nguyên.
+    openedByUs = browserManager.getContext() === null || browserManager.isHeadless() !== settings.headless
+    const context = await browserManager.ensureMode(settings.headless, 'about:blank')
 
     // 3. Vòng lặp tuần tự qua các dòng.
     for (let i = 0; i < rows.length; i++) {

@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
 import { execSync } from 'child_process'
-import { chromium, type BrowserContext } from 'patchright'
+import { chromium, type BrowserContext, type Page } from 'patchright'
 
 // Thư mục profile chromium cố định (1 profile duy nhất cho toàn app).
 export function getProfileDir(): string {
@@ -12,14 +12,13 @@ export function getProfileDir(): string {
 // Kích thước cửa sổ Chrome cho cả hai chế độ (đủ rộng để Amazon dựng giao diện desktop).
 const WINDOW_WIDTH = 1440
 const WINDOW_HEIGHT = 900
-// Toạ độ đẩy cửa sổ ra ngoài vùng nhìn thấy khi chạy ngầm. Chrome nhân toạ độ với device
-// pixel ratio, nên dùng số rất lớn để chắc chắn nằm ngoài mọi màn hình.
-const OFFSCREEN_X = -32000
-const OFFSCREEN_Y = -32000
 
 // Quản lý vòng đời 1 profile chromium (persistent context lưu session/cookie Amazon).
 class BrowserManager {
   private context: BrowserContext | null = null
+  // Context hiện tại đang chạy headless hay không (null = chưa mở). Dùng để biết có phải
+  // mở lại Chrome khi batch cần chế độ khác với lúc user mở profile.
+  private headlessMode: boolean | null = null
   private statusListeners = new Set<(open: boolean) => void>()
 
   isOpen(): boolean {
@@ -39,38 +38,42 @@ class BrowserManager {
   //  - user bấm "Mở profile" -> false (cửa sổ hiện bình thường để đăng nhập Amazon).
   //  - chạy batch -> dùng settings.headless.
   //
-  // "Chạy ngầm" KHÔNG dùng Chrome headless mà mở Chrome thật rồi đẩy cửa sổ ra ngoài màn
-  // hình. Lý do: headless là một biến số dễ bị Amazon phân biệt (User-Agent chứa
-  // "HeadlessChrome"), trong khi cách này chạy đúng Chrome bình thường nên hành vi khớp
-  // với lúc user tự mở cửa sổ. Đã đo: cả hai cách đều lấy được link.
+  // Chạy ngầm dùng ĐÚNG Chrome headless: không cửa sổ, không icon taskbar, không Alt-Tab.
+  // Đã thử hai cách khác và cả hai đều KHÔNG ẩn thật sự nên đã bỏ:
+  //  - đẩy cửa sổ ra toạ độ âm: Chrome kẹp toạ độ (truyền -32000 thì báo về -26214) và
+  //    cửa sổ vẫn còn trong taskbar lẫn Alt-Tab.
+  //  - thu nhỏ (minimized): vẫn là cửa sổ thật nên vẫn có icon taskbar.
+  // Headless từng bị nghi gây lỗi NO_POPOVER, nhưng nguyên nhân thật là phiên Associates
+  // hết hạn. Đã đo lại khi phiên còn hạn: headless lấy được link y như headful
+  // (/creators/links/render/ss trả 200, SiteStripe hydrate xong, popover mở).
   async openProfile(opts?: { headless?: boolean; startUrl?: string }): Promise<BrowserContext> {
     if (this.context) return this.context
 
     const profileDir = getProfileDir()
     mkdirSync(profileDir, { recursive: true })
 
-    const offscreen = opts?.headless ?? false
+    const headless = opts?.headless ?? false
 
     const launch = (): Promise<BrowserContext> =>
       chromium.launchPersistentContext(profileDir, {
         channel: 'chrome',
-        // Luôn headful — xem ghi chú ở trên.
-        headless: false,
-        // Chạy ngầm: cố định viewport để layout desktop ổn định dù cửa sổ ở ngoài màn hình.
-        // Hiện cửa sổ: viewport null để trang khớp kích thước cửa sổ thật.
-        viewport: offscreen ? { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } : null,
+        headless,
+        // Headless: Chrome mặc định chỉ 762×484 (screen 800×600) — ép rộng cho khớp desktop.
+        // Headful: viewport null để trang khớp kích thước cửa sổ thật.
+        viewport: headless ? { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } : null,
         args: [
           '--no-first-run',
           '--no-default-browser-check',
           '--disable-infobars',
           '--test-type',
+          // Bỏ bong bóng "Restore pages? Chrome didn't shut down correctly" — nó xuất hiện
+          // khi tiến trình Chrome trước bị kill và che mất SiteStripe bar.
+          '--hide-crash-restore-bubble',
           // Chrome LƯU vị trí cửa sổ vào profile (browser.window_placement trong
-          // Default/Preferences). Nếu không đặt lại vị trí khi hiện cửa sổ, lần mở sau khi
-          // chạy ngầm sẽ kế thừa toạ độ âm và cửa sổ nằm ngoài màn hình — user không thấy
-          // để đăng nhập. Vì vậy LUÔN truyền --window-position cho cả hai chế độ.
-          offscreen
-            ? `--window-position=${OFFSCREEN_X},${OFFSCREEN_Y}`
-            : '--window-position=0,0',
+          // Default/Preferences). Luôn đặt lại vị trí để cửa sổ không kế thừa toạ độ cũ.
+          '--window-position=0,0',
+          // Đặt cả kích thước cửa sổ để screen.width/height khớp viewport (Amazon đọc các
+          // giá trị này khi dựng layout).
           `--window-size=${WINDOW_WIDTH},${WINDOW_HEIGHT}`
         ]
       })
@@ -93,6 +96,7 @@ class BrowserManager {
     context.on('close', () => {
       if (this.context === context) {
         this.context = null
+        this.headlessMode = null
         this.emitStatus(false)
       }
     })
@@ -105,6 +109,7 @@ class BrowserManager {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {})
 
     this.context = context
+    this.headlessMode = headless
     this.emitStatus(true)
 
     // Điều hướng tới trang khởi đầu (Amazon home để user đăng nhập). Lỗi điều hướng
@@ -116,14 +121,33 @@ class BrowserManager {
     return context
   }
 
+  // Đảm bảo context đang mở ĐÚNG chế độ yêu cầu. Trả về context dùng được.
+  //
+  // Cần thiết vì headless/headful là tham số lúc LAUNCH Chrome, không đổi được sau đó. Nếu
+  // user bấm "Mở profile để đăng nhập" (luôn headful) rồi bấm "Bắt đầu" với "Chạy ngầm" đang
+  // bật, context sẵn có là headful — trước đây batch dùng lại nó nên Chrome vẫn hiện. Giờ
+  // đóng context cũ rồi mở lại đúng chế độ. Session/cookie nằm trong profile trên đĩa nên
+  // đóng-mở không mất đăng nhập.
+  async ensureMode(headless: boolean, startUrl?: string): Promise<BrowserContext> {
+    if (this.context && this.headlessMode === headless) return this.context
+    if (this.context) await this.closeProfile()
+    return this.openProfile({ headless, startUrl })
+  }
+
   getContext(): BrowserContext | null {
     return this.context
+  }
+
+  // Context đang mở có phải headless không (null = chưa mở Chrome).
+  isHeadless(): boolean | null {
+    return this.headlessMode
   }
 
   async closeProfile(): Promise<void> {
     const context = this.context
     if (!context) return
     this.context = null
+    this.headlessMode = null
     this.emitStatus(false)
     await context.close().catch(() => {})
   }
