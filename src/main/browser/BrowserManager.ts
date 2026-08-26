@@ -9,10 +9,13 @@ export function getProfileDir(): string {
   return join(app.getPath('userData'), 'profile')
 }
 
-// Kích thước cửa sổ khi chạy ngầm (headless). Chrome headless mặc định chỉ 762x484 —
-// quá hẹp, Amazon dựng layout hẹp và popover SiteStripe không mở được.
-const HEADLESS_WIDTH = 1440
-const HEADLESS_HEIGHT = 900
+// Kích thước cửa sổ Chrome cho cả hai chế độ (đủ rộng để Amazon dựng giao diện desktop).
+const WINDOW_WIDTH = 1440
+const WINDOW_HEIGHT = 900
+// Toạ độ đẩy cửa sổ ra ngoài vùng nhìn thấy khi chạy ngầm. Chrome nhân toạ độ với device
+// pixel ratio, nên dùng số rất lớn để chắc chắn nằm ngoài mọi màn hình.
+const OFFSCREEN_X = -32000
+const OFFSCREEN_Y = -32000
 
 // Quản lý vòng đời 1 profile chromium (persistent context lưu session/cookie Amazon).
 class BrowserManager {
@@ -32,34 +35,43 @@ class BrowserManager {
     for (const cb of this.statusListeners) cb(open)
   }
 
-  // Mở profile. headlessOverride (nếu truyền) quyết định chế độ hiển thị:
-  //  - user bấm "Mở profile" -> false (headful, hiện cửa sổ để đăng nhập Amazon).
+  // Mở profile. opts.headless quyết định chế độ "chạy ngầm":
+  //  - user bấm "Mở profile" -> false (cửa sổ hiện bình thường để đăng nhập Amazon).
   //  - chạy batch -> dùng settings.headless.
+  //
+  // "Chạy ngầm" KHÔNG dùng Chrome headless mà mở Chrome thật rồi đẩy cửa sổ ra ngoài màn
+  // hình. Lý do: headless là một biến số dễ bị Amazon phân biệt (User-Agent chứa
+  // "HeadlessChrome"), trong khi cách này chạy đúng Chrome bình thường nên hành vi khớp
+  // với lúc user tự mở cửa sổ. Đã đo: cả hai cách đều lấy được link.
   async openProfile(opts?: { headless?: boolean; startUrl?: string }): Promise<BrowserContext> {
     if (this.context) return this.context
 
     const profileDir = getProfileDir()
     mkdirSync(profileDir, { recursive: true })
 
-    const headless = opts?.headless ?? false
+    const offscreen = opts?.headless ?? false
 
     const launch = (): Promise<BrowserContext> =>
       chromium.launchPersistentContext(profileDir, {
         channel: 'chrome',
-        headless,
-        // Headful: viewport null để trang khớp kích thước cửa sổ thật.
-        // Headless: Chrome mặc định chỉ 762x484 (screen 800x600) — đã đo. Cửa sổ hẹp làm
-        // SiteStripe dựng layout khác và popover "Share affiliate link" không mở, dẫn tới
-        // lỗi NO_POPOVER chỉ xảy ra khi chạy ngầm. Ép viewport rộng cho khớp headful.
-        viewport: headless ? { width: HEADLESS_WIDTH, height: HEADLESS_HEIGHT } : null,
+        // Luôn headful — xem ghi chú ở trên.
+        headless: false,
+        // Chạy ngầm: cố định viewport để layout desktop ổn định dù cửa sổ ở ngoài màn hình.
+        // Hiện cửa sổ: viewport null để trang khớp kích thước cửa sổ thật.
+        viewport: offscreen ? { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } : null,
         args: [
           '--no-first-run',
           '--no-default-browser-check',
           '--disable-infobars',
           '--test-type',
-          // Đặt cả kích thước cửa sổ để screen.width/height khớp viewport (Amazon đọc
-          // các giá trị này khi dựng layout).
-          ...(headless ? [`--window-size=${HEADLESS_WIDTH},${HEADLESS_HEIGHT}`] : [])
+          // Chrome LƯU vị trí cửa sổ vào profile (browser.window_placement trong
+          // Default/Preferences). Nếu không đặt lại vị trí khi hiện cửa sổ, lần mở sau khi
+          // chạy ngầm sẽ kế thừa toạ độ âm và cửa sổ nằm ngoài màn hình — user không thấy
+          // để đăng nhập. Vì vậy LUÔN truyền --window-position cho cả hai chế độ.
+          offscreen
+            ? `--window-position=${OFFSCREEN_X},${OFFSCREEN_Y}`
+            : '--window-position=0,0',
+          `--window-size=${WINDOW_WIDTH},${WINDOW_HEIGHT}`
         ]
       })
 

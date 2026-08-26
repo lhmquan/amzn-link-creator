@@ -368,13 +368,20 @@ async function runOne(
   // 3 + 4. Bấm Get Link để mở popover "Share affiliate link".
   // Popover đôi khi không mở ở lần bấm đầu (trang chưa gắn xong handler, hoặc lần bấm
   // trước đã toggle nó đóng lại). Thử tối đa 3 lần, mỗi lần chờ ngắn thay vì chờ một
-  // lần thật lâu rồi bỏ dòng.
+  // lần thật lâu rồi bỏ dòng. Giữa các lần có nghỉ tăng dần (backoff) vì nguyên nhân
+  // thường gặp là Amazon đang siết tần suất tạo link.
   const POPOVER_TRIES = 3
   const popoverWaitMs = Math.max(4000, Math.floor(settings.pageTimeoutMs / POPOVER_TRIES))
   let popoverOpen = false
   let clickedGetLink = false
 
   for (let attempt = 1; attempt <= POPOVER_TRIES && !popoverOpen; attempt++) {
+    if (attempt > 1) {
+      // Nghỉ tăng dần: 2s, 4s… rồi bấm lại.
+      const backoffMs = 2000 * (attempt - 1)
+      report(`Popover chưa mở — nghỉ ${Math.round(backoffMs / 1000)}s rồi thử lại…`)
+      await sleep(backoffMs)
+    }
     report(attempt === 1 ? 'Đang bấm Get Link…' : `Đang bấm Get Link (lần ${attempt})…`)
 
     let clickedThisTry = false
@@ -397,10 +404,14 @@ async function runOne(
   }
   if (!popoverOpen) {
     const shot = await dumpFailure(page, 'no_popover')
+    // Amazon giới hạn tần suất tạo link: khi bị siết, bấm "Get Link" không mở popover và
+    // cũng KHÔNG có thông báo lỗi nào trên trang. Đã đo: lúc đó cả chế độ hiện cửa sổ lẫn
+    // chạy ngầm đều không mở được; nghỉ một lúc thì hoạt động lại. Nêu rõ trong step để
+    // user biết cần tăng "Delay giữa các dòng" chứ không phải lỗi selector.
     return {
       ok: false,
       error: 'NO_POPOVER',
-      step: `Popover không mở sau ${POPOVER_TRIES} lần bấm · ${shot}`
+      step: `Popover không mở sau ${POPOVER_TRIES} lần bấm (Amazon có thể đang giới hạn tần suất — thử tăng delay giữa các dòng) · ${shot}`
     }
   }
   await sleep(settings.delayMs)

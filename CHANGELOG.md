@@ -2,6 +2,16 @@
 
 Tất cả thay đổi đáng chú ý của AMZN LINK CREATOR được ghi tại đây.
 
+## [0.5.2] - 2026-08-26
+
+### Sửa lỗi
+- **Chạy ngầm không còn dùng Chrome headless**: thay vào đó mở Chrome thật rồi đẩy cửa sổ ra ngoài màn hình (`--window-position=-32000,-32000`) để user không thấy. Headless là một biến số dễ bị Amazon phân biệt (User-Agent chứa `HeadlessChrome`, `screen` chỉ 800×600), còn cách này chạy đúng Chrome bình thường nên hành vi khớp với lúc user tự mở cửa sổ.
+- **Cửa sổ không còn "mất tích" sau khi chạy ngầm**: Chrome lưu vị trí cửa sổ vào profile (`browser.window_placement`), nên lần mở "Mở profile để đăng nhập" sau một lần chạy ngầm sẽ kế thừa toạ độ âm và nằm ngoài màn hình. App giờ luôn truyền `--window-position` cho cả hai chế độ.
+- **Thử lại có nghỉ tăng dần khi popover không mở**: giữa 3 lần bấm "Get Link" có nghỉ 2s rồi 4s, thay vì bấm liên tiếp.
+
+### Cải tiến
+- **Thông báo lỗi NO_POPOVER nêu rõ nguyên nhân thường gặp**: Amazon giới hạn tần suất tạo link; khi bị siết thì bấm "Get Link" không mở popover và trang KHÔNG hiện bất kỳ thông báo lỗi nào. Đã đo: lúc đó cả chế độ hiện cửa sổ lẫn chạy ngầm đều thất bại như nhau. Cột lỗi trong Nhật ký giờ gợi ý tăng "Delay giữa các dòng" và chạy lại sau ít phút.
+
 ## [0.5.1] - 2026-08-26
 
 ### Sửa lỗi

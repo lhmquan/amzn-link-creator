@@ -14,7 +14,7 @@ export interface AppSettings {
   storeId: string // Store ID cần chọn/kiểm trên SiteStripe
   trackingId: string // Tracking ID cần chọn trên SiteStripe
   linkType: 'short' | 'full' // toggle cố định cho cả batch
-  headless: boolean // chạy ngầm khi chạy batch
+  headless: boolean // chạy ngầm khi chạy batch (cửa sổ Chrome thật, đẩy ra ngoài màn hình)
   delayMs: number // delay giữa các thao tác trên trang
   rowDelayMs: number // delay giữa các dòng
   pageTimeoutMs: number // timeout chờ trang Amazon load
