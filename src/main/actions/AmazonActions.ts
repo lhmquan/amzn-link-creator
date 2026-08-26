@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from 'patchright'
-import { mkdirSync } from 'fs'
+import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
 import type { AppSettings, RowResult } from '../../shared/types'
@@ -33,6 +33,24 @@ export function screenshotPath(prefix = 'row'): string {
     /* ignore */
   }
   return join(dir, `${prefix}_${Date.now()}.png`)
+}
+
+// Lưu ảnh chụp + HTML của trang khi bước SiteStripe thất bại, để soi được thật sự
+// Amazon đang hiện gì (nhất là lúc chạy ngầm, không nhìn thấy cửa sổ).
+// Trả về đường dẫn ảnh để ghi vào step của nhật ký.
+async function dumpFailure(page: Page, prefix: string): Promise<string> {
+  const png = screenshotPath(prefix)
+  await page.screenshot({ path: png, fullPage: false, timeout: 8000 }).catch(() => {})
+  const html = png.replace(/\.png$/, '.html')
+  const content = await page.content().catch(() => '')
+  if (content) {
+    try {
+      writeFileSync(html, content, 'utf8')
+    } catch {
+      /* ignore */
+    }
+  }
+  return png
 }
 
 // ---- Selector SiteStripe (theo DOM thật của Enhanced Flow "T1") ----
@@ -347,23 +365,43 @@ async function runOne(
     return { ok: false, error: 'SITESTRIPE_NOT_FOUND', step: 'Chưa đăng nhập Associates?' }
   }
 
-  // 3. Bấm Get Link để mở popover. Không có nút -> sản phẩm không hỗ trợ affiliate.
-  report('Đang bấm Get Link…')
+  // 3 + 4. Bấm Get Link để mở popover "Share affiliate link".
+  // Popover đôi khi không mở ở lần bấm đầu (trang chưa gắn xong handler, hoặc lần bấm
+  // trước đã toggle nó đóng lại). Thử tối đa 3 lần, mỗi lần chờ ngắn thay vì chờ một
+  // lần thật lâu rồi bỏ dòng.
+  const POPOVER_TRIES = 3
+  const popoverWaitMs = Math.max(4000, Math.floor(settings.pageTimeoutMs / POPOVER_TRIES))
+  let popoverOpen = false
   let clickedGetLink = false
-  for (const sel of SEL_GET_LINK) {
-    if (await exists(page, sel)) {
-      clickedGetLink = await robustClick(page, sel)
-      if (clickedGetLink) break
+
+  for (let attempt = 1; attempt <= POPOVER_TRIES && !popoverOpen; attempt++) {
+    report(attempt === 1 ? 'Đang bấm Get Link…' : `Đang bấm Get Link (lần ${attempt})…`)
+
+    let clickedThisTry = false
+    for (const sel of SEL_GET_LINK) {
+      if (await exists(page, sel)) {
+        clickedThisTry = await robustClick(page, sel)
+        if (clickedThisTry) break
+      }
     }
-  }
-  if (!clickedGetLink) {
-    return { ok: false, error: 'NO_GET_LINK', step: 'Không thấy nút Get Link' }
+    if (clickedThisTry) clickedGetLink = true
+    if (!clickedGetLink) break // không có nút Get Link -> khỏi thử tiếp
+
+    report('Đang chờ popover mở…')
+    popoverOpen = await waitVisible(page, SEL_POPOVER, popoverWaitMs)
   }
 
-  // 4. Chờ popover "Share affiliate link" mở.
-  const popoverOpen = await waitVisible(page, SEL_POPOVER, settings.pageTimeoutMs)
+  if (!clickedGetLink) {
+    const shot = await dumpFailure(page, 'no_get_link')
+    return { ok: false, error: 'NO_GET_LINK', step: `Không thấy nút Get Link · ${shot}` }
+  }
   if (!popoverOpen) {
-    return { ok: false, error: 'NO_POPOVER', step: 'Popover không mở' }
+    const shot = await dumpFailure(page, 'no_popover')
+    return {
+      ok: false,
+      error: 'NO_POPOVER',
+      step: `Popover không mở sau ${POPOVER_TRIES} lần bấm · ${shot}`
+    }
   }
   await sleep(settings.delayMs)
 

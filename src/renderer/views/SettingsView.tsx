@@ -165,6 +165,11 @@ export default function SettingsView(): JSX.Element {
           <input type="checkbox" checked={s.headless} onChange={(e) => set('headless', e.target.checked)} />
           Chạy ngầm (headless) khi chạy batch
         </label>
+        <p className="muted">
+          Chạy ngầm dùng cửa sổ ảo 1440×900 để SiteStripe dựng đúng giao diện desktop. Nếu gặp
+          lỗi NO_POPOVER, ảnh chụp và HTML của trang được lưu trong thư mục <code>logs</code> của
+          app (đường dẫn hiện ở cột lỗi trong Nhật ký).
+        </p>
         <div className="grid3">
           <label>
             Delay giữa thao tác (giây)

@@ -2,6 +2,15 @@
 
 Tất cả thay đổi đáng chú ý của AMZN LINK CREATOR được ghi tại đây.
 
+## [0.5.1] - 2026-08-26
+
+### Sửa lỗi
+- **Chạy ngầm (headless) luôn báo NO_POPOVER**: Chrome headless mặc định chỉ mở cửa sổ 762×484 (`screen` 800×600) — đã đo. Với chiều rộng đó Amazon dựng giao diện hẹp và popover "Share affiliate link" không mở, nên mọi dòng đều thất bại khi bật "Chạy ngầm" nhưng lại chạy tốt khi mở browser. Chế độ ngầm giờ dùng cửa sổ ảo 1440×900 (`viewport` + `--window-size` để `screen.width` cũng khớp). Chế độ hiện cửa sổ giữ nguyên `viewport: null` như trước.
+- **Bấm Get Link có thử lại**: popover đôi khi không mở ở lần bấm đầu. App thử tối đa 3 lần, mỗi lần chờ ngắn (`pageTimeoutMs / 3`, tối thiểu 4 giây) thay vì chờ một lần thật lâu rồi bỏ dòng.
+
+### Cải tiến
+- **Lưu ảnh chụp + HTML khi thất bại**: lỗi `NO_POPOVER` / `NO_GET_LINK` giờ lưu ảnh chụp và HTML của trang vào thư mục `logs` trong app data, đường dẫn ảnh hiện ngay ở cột lỗi của Nhật ký — soi được Amazon thật sự đang hiện gì, kể cả khi chạy ngầm không nhìn thấy cửa sổ.
+
 ## [0.5.0] - 2026-08-26
 
 ### Thay đổi lớn

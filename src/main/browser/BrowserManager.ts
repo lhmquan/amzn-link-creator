@@ -9,6 +9,11 @@ export function getProfileDir(): string {
   return join(app.getPath('userData'), 'profile')
 }
 
+// Kích thước cửa sổ khi chạy ngầm (headless). Chrome headless mặc định chỉ 762x484 —
+// quá hẹp, Amazon dựng layout hẹp và popover SiteStripe không mở được.
+const HEADLESS_WIDTH = 1440
+const HEADLESS_HEIGHT = 900
+
 // Quản lý vòng đời 1 profile chromium (persistent context lưu session/cookie Amazon).
 class BrowserManager {
   private context: BrowserContext | null = null
@@ -42,8 +47,20 @@ class BrowserManager {
       chromium.launchPersistentContext(profileDir, {
         channel: 'chrome',
         headless,
-        viewport: null,
-        args: ['--no-first-run', '--no-default-browser-check', '--disable-infobars', '--test-type']
+        // Headful: viewport null để trang khớp kích thước cửa sổ thật.
+        // Headless: Chrome mặc định chỉ 762x484 (screen 800x600) — đã đo. Cửa sổ hẹp làm
+        // SiteStripe dựng layout khác và popover "Share affiliate link" không mở, dẫn tới
+        // lỗi NO_POPOVER chỉ xảy ra khi chạy ngầm. Ép viewport rộng cho khớp headful.
+        viewport: headless ? { width: HEADLESS_WIDTH, height: HEADLESS_HEIGHT } : null,
+        args: [
+          '--no-first-run',
+          '--no-default-browser-check',
+          '--disable-infobars',
+          '--test-type',
+          // Đặt cả kích thước cửa sổ để screen.width/height khớp viewport (Amazon đọc
+          // các giá trị này khi dựng layout).
+          ...(headless ? [`--window-size=${HEADLESS_WIDTH},${HEADLESS_HEIGHT}`] : [])
+        ]
       })
 
     // Profile có thể bị khóa bởi tiến trình Chrome cũ/zombie. Thử mở; nếu lỗi session
