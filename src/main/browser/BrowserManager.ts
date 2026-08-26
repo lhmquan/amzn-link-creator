@@ -68,11 +68,12 @@ class BrowserManager {
       }
     })
 
-    // Cấp quyền clipboard cho amazon.com — SiteStripe "Copy affiliate link" ghi link
-    // vào clipboard, app đọc lại qua navigator.clipboard.readText().
-    await context
-      .grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'https://www.amazon.com' })
-      .catch(() => {})
+    // Cấp quyền clipboard. SiteStripe giao diện cũ ghi link vào clipboard qua nút
+    // "Copy affiliate link", app đọc lại bằng navigator.clipboard.readText().
+    // Cấp cho MỌI origin (không truyền origin) vì Amazon chuyển hướng qua nhiều tên miền
+    // (www.amazon.com, smile.amazon.com, amazon.com…); nếu chỉ cấp 1 origin thì readText()
+    // bị NotAllowedError trên các tên miền còn lại.
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {})
 
     this.context = context
     this.emitStatus(true)

@@ -35,6 +35,9 @@ function migrate(d: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_logs_ts ON logs (ts);
   `)
+
+  // Tên sản phẩm bóc từ trang Amazon (đầu vào cho AI sinh caption) — thêm cho DB cũ.
+  addColumnIfMissing(d, 'logs', 'product_title', 'TEXT')
 }
 
 // Thêm cột nếu chưa có (idempotent, an toàn với DB cũ).

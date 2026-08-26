@@ -47,7 +47,8 @@ export async function fetchRows(): Promise<SheetRow[]> {
 }
 
 // Báo kết quả 1 dòng về N8N (event reportEvent). Gửi kèm nguyên dòng gốc để N8N khớp
-// đúng hàng sheet. ok=true kèm affiliateLink+caption; ok=false kèm error ngắn gọn.
+// đúng hàng sheet. ok=true kèm affiliateLink + caption (do AI của app sinh) + productTitle;
+// ok=false kèm error ngắn gọn. captionError là lỗi riêng của bước sinh caption.
 export async function reportRow(
   row: SheetRow,
   result: RowResult
@@ -60,8 +61,10 @@ export async function reportRow(
         ok: result.ok,
         affiliateLink: result.affiliateLink ?? null,
         caption: result.caption ?? null,
+        productTitle: result.productTitle ?? null,
         linkType,
-        error: result.error ?? null
+        error: result.error ?? null,
+        captionError: result.captionError ?? null
       })
     )
     if (!res.ok) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Save, Globe, ExternalLink, XCircle } from 'lucide-react'
-import type { AppSettings, WebhookTestResult } from '@shared/types'
+import { Save, Globe, ExternalLink, XCircle, Sparkles } from 'lucide-react'
+import type { AppSettings, WebhookTestResult, AiTestResult } from '@shared/types'
 
 // Settings lưu delay/timeout bằng ms; UI hiển thị & nhập bằng giây cho dễ thiết lập.
 const msToSec = (ms: number): number => Math.round((ms / 1000) * 100) / 100
@@ -14,6 +14,9 @@ export default function SettingsView(): JSX.Element {
   const [testResult, setTestResult] = useState<WebhookTestResult | null>(null)
   const [testing, setTesting] = useState(false)
   const [autoStart, setAutoStart] = useState(false)
+  const [aiSample, setAiSample] = useState('')
+  const [aiResult, setAiResult] = useState<AiTestResult | null>(null)
+  const [aiTesting, setAiTesting] = useState(false)
 
   useEffect(() => {
     window.amzn.settings.get().then(setS).catch(() => {})
@@ -49,6 +52,19 @@ export default function SettingsView(): JSX.Element {
       setTestResult(r)
     } finally {
       setTesting(false)
+    }
+  }
+
+  // Test AI: lưu cấu hình trước rồi gọi thật API với tên sản phẩm mẫu.
+  const testAi = async (): Promise<void> => {
+    setAiTesting(true)
+    setAiResult(null)
+    try {
+      await window.amzn.settings.save(s)
+      const r = await window.amzn.ai.test(aiSample)
+      setAiResult(r)
+    } finally {
+      setAiTesting(false)
     }
   }
 
@@ -181,6 +197,104 @@ export default function SettingsView(): JSX.Element {
             />
           </label>
         </div>
+      </section>
+
+      <section className="card">
+        <h2>AI sinh caption</h2>
+        <p className="muted">
+          Amazon đã bỏ Caption Generator trên SiteStripe, nên caption do AI của app sinh ra từ tên
+          sản phẩm, rồi gửi về N8N như cũ. Dùng API tương thích OpenAI (endpoint
+          <code> /chat/completions</code>).
+        </p>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={s.aiEnabled}
+            onChange={(e) => set('aiEnabled', e.target.checked)}
+          />
+          Bật sinh caption bằng AI
+        </label>
+        <div className="grid2">
+          <label>
+            Base URL
+            <input
+              value={s.aiBaseUrl}
+              onChange={(e) => set('aiBaseUrl', e.target.value)}
+              placeholder="https://api.openai.com/v1"
+            />
+          </label>
+          <label>
+            Model
+            <input
+              value={s.aiModel}
+              onChange={(e) => set('aiModel', e.target.value)}
+              placeholder="gpt-4o-mini"
+            />
+          </label>
+        </div>
+        <label>
+          API Key
+          <input
+            type="password"
+            value={s.aiApiKey}
+            onChange={(e) => set('aiApiKey', e.target.value)}
+            placeholder="sk-..."
+          />
+        </label>
+        <div className="grid2">
+          <label>
+            Giới hạn độ dài caption (ký tự, 0 = không giới hạn)
+            <input
+              type="number"
+              min="0"
+              step="10"
+              value={s.aiMaxLength}
+              onChange={(e) => set('aiMaxLength', Math.max(0, Math.round(Number(e.target.value))))}
+            />
+          </label>
+          <label>
+            Timeout gọi AI (giây)
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={msToSec(s.aiTimeoutMs)}
+              onChange={(e) => set('aiTimeoutMs', secToMs(e.target.value))}
+            />
+          </label>
+        </div>
+        <label>
+          Prompt (biến khả dụng: {'{title}'} tên sản phẩm · {'{url}'} link Amazon · {'{link}'}{' '}
+          affiliate link · {'{maxLength}'} giới hạn ký tự)
+          <textarea
+            className="prompt"
+            rows={7}
+            value={s.aiPrompt}
+            onChange={(e) => set('aiPrompt', e.target.value)}
+            placeholder="Viết caption cho sản phẩm: {title}"
+          />
+        </label>
+        <label>
+          Tên sản phẩm mẫu để test (bỏ trống sẽ dùng sản phẩm mẫu có sẵn)
+          <input
+            value={aiSample}
+            onChange={(e) => setAiSample(e.target.value)}
+            placeholder="Anker Soundcore Life Q30 Headphones…"
+          />
+        </label>
+        <div className="row">
+          <button onClick={testAi} disabled={aiTesting}>
+            <Sparkles size={16} /> {aiTesting ? 'Đang gọi AI…' : 'Test AI'}
+          </button>
+          {aiResult && (
+            <span className={aiResult.ok ? 'badge on' : 'badge off'}>
+              {aiResult.ok
+                ? `OK — ${aiResult.model ?? s.aiModel} · ${aiResult.caption?.length ?? 0} ký tự`
+                : `Lỗi: ${aiResult.error}`}
+            </span>
+          )}
+        </div>
+        {aiResult?.ok && aiResult.caption && <pre className="preview">{aiResult.caption}</pre>}
       </section>
 
       <div className="row">

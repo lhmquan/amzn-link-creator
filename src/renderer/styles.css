@@ -225,7 +225,8 @@ label.checkbox {
   color: var(--text);
 }
 input,
-select {
+select,
+textarea {
   display: block;
   width: 100%;
   margin-top: 5px;
@@ -241,9 +242,43 @@ label.checkbox input {
   margin-top: 0;
 }
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* Ô nhập prompt AI: nhiều dòng, cho phép kéo giãn dọc. */
+textarea.prompt {
+  font-family: 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 110px;
+}
+
+/* Khung xem trước caption AI trả về khi bấm Test AI. */
+.preview {
+  margin: 10px 0 0;
+  padding: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+code {
+  padding: 1px 5px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: 'Consolas', monospace;
+  font-size: 12px;
 }
 
 .grid2 {
@@ -367,7 +402,7 @@ button.danger {
   font-weight: 600;
 }
 .truncate {
-  max-width: 280px;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -12,6 +12,19 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+// Timeout ngắn cho mọi phép ĐỌC thuộc tính DOM.
+// Playwright mặc định chờ 30 giây khi element không tồn tại — đã đo: inputValue(),
+// getAttribute(), isDisabled(), selectOption() đều treo đúng 30.0s trên selector thiếu.
+// SiteStripe đổi giao diện là chuyện thường xuyên, nên KHÔNG được gọi các API này mà
+// thiếu timeout tường minh, nếu không mỗi dòng sẽ đứng hàng chục giây.
+const READ_TIMEOUT_MS = 2000
+// Timeout cho thao tác clipboard. page.evaluate KHÔNG có timeout mặc định (đã đo: promise
+// không resolve thì evaluate treo vô hạn), còn navigator.clipboard.readText() treo khi
+// cửa sổ Chrome không được focus ở chế độ headful.
+const CLIPBOARD_TIMEOUT_MS = 3000
+// Số lần đọc clipboard thất bại liên tiếp thì bỏ cuộc (clipboard đang bị chặn hẳn).
+const CLIPBOARD_MAX_FAILS = 3
+
 export function screenshotPath(prefix = 'row'): string {
   const dir = join(app.getPath('userData'), 'logs')
   try {
@@ -54,12 +67,15 @@ const SEL_LINK_SPINNER = '#amzn-ss-loading-spinner'
 // Thông báo link tạo lỗi / sản phẩm bị loại khỏi chương trình.
 const SEL_LINK_FAILURE = '.amzn-ss-popover-link-failure-message'
 const SEL_EXCLUDED = '.amzn-ss-popover-third-party-message'
-// Caption generator (expander).
-const SEL_CAPTION_EXPANDER = '#amzn-clt-caption-ai-expander-heading'
-const SEL_CAPTION_TEXTAREA = '#amzn-clt-caption-ai-textarea'
-const SEL_CAPTION_SPINNER = '#amzn-clt-caption-ai-spinner'
-const SEL_CAPTION_SAFETY = '#amzn-clt-caption-ai-safety-alert' // "Caption generator isn't available"
-const SEL_CAPTION_COPY = '#amzn-clt-caption-ai-copy-btn-announce' // nút "Copy caption" -> clipboard
+// Tên sản phẩm — dùng làm biến {title} cho prompt AI sinh caption.
+// Amazon đã bỏ Caption Generator trên SiteStripe nên caption do AI của app sinh ra.
+const SEL_PRODUCT_TITLE = [
+  '#productTitle',
+  '#title span#productTitle',
+  'h1#title',
+  '#titleSection #productTitle',
+  'h1.product-title-word-break'
+]
 
 // Element có tồn tại + visible trong timeout không.
 async function waitVisible(page: Page, selector: string, timeoutMs: number): Promise<boolean> {
@@ -99,7 +115,7 @@ async function robustClick(page: Page, selector: string): Promise<boolean> {
       return true
     } catch {
       return loc
-        .dispatchEvent('click')
+        .dispatchEvent('click', undefined, { timeout: READ_TIMEOUT_MS })
         .then(() => true)
         .catch(() => false)
     }
@@ -123,14 +139,80 @@ async function isErrorPage(page: Page): Promise<boolean> {
   }
 }
 
-// Đọc clipboard qua page context (đã cấp quyền clipboard-read).
+// Đọc clipboard qua page context. Bọc timeout vì page.evaluate không tự hết hạn và
+// navigator.clipboard.readText() treo vô hạn khi cửa sổ Chrome mất focus (headful).
 async function readClipboard(page: Page): Promise<string> {
-  try {
-    const text = (await page.evaluate(`navigator.clipboard.readText()`)) as string
-    return (text ?? '').trim()
-  } catch {
+  const read = page
+    .evaluate(`navigator.clipboard.readText()`)
+    .then((t) => ((t as string) ?? '').trim())
+    .catch(() => '')
+  const timeout = sleep(CLIPBOARD_TIMEOUT_MS).then(() => '')
+  return Promise.race([read, timeout])
+}
+
+// Ghi 1 giá trị mốc vào clipboard để phát hiện nút Copy có thực sự ghi giá trị MỚI hay không.
+// Không xoá mốc thì clipboard vẫn giữ link của dòng TRƯỚC, dễ gán link cũ cho dòng hiện tại.
+async function writeClipboard(page: Page, value: string): Promise<boolean> {
+  const write = page
+    .evaluate(`navigator.clipboard.writeText(${JSON.stringify(value)})`)
+    .then(() => true)
+    .catch(() => false)
+  const timeout = sleep(CLIPBOARD_TIMEOUT_MS).then(() => false)
+  return Promise.race([write, timeout])
+}
+
+// Clipboard bị chặn (không focus / thiếu quyền) sau vài lần liên tiếp -> ngừng thử cho cả
+// batch, chỉ dùng cách đọc link trong ô text. Tránh mỗi dòng mất thêm vài giây vô ích.
+let clipboardFails = 0
+
+// Cho phép còn thử clipboard nữa không.
+function clipboardUsable(): boolean {
+  return clipboardFails < CLIPBOARD_MAX_FAILS
+}
+
+// Đặt lại trạng thái clipboard khi bắt đầu batch mới (profile/cửa sổ có thể đã khác).
+export function resetClipboardState(): void {
+  clipboardFails = 0
+}
+
+// Bấm "Copy affiliate link" rồi đọc clipboard, có chống giá trị cũ (stale):
+// ghi mốc trước khi bấm, sau đó chỉ nhận giá trị KHÁC mốc và là URL http(s).
+async function copyLinkViaClipboard(
+  page: Page,
+  settings: AppSettings,
+  report: StepReporter
+): Promise<string> {
+  const sentinel = `amzn-link-creator-sentinel-${Date.now()}`
+  // Không ghi được mốc nghĩa là clipboard đang bị chặn -> khỏi bấm Copy cho nhanh.
+  report('Đang đặt mốc clipboard…')
+  if (!(await writeClipboard(page, sentinel))) {
+    clipboardFails++
+    report('Không ghi được clipboard — bỏ qua cách copy.')
     return ''
   }
+
+  report('Đang bấm Copy affiliate link…')
+  if (!(await robustClick(page, SEL_COPY_LINK))) return ''
+
+  // Chờ Amazon ghi link vào clipboard. Giới hạn ngắn: đây chỉ là đường nhanh, đã có
+  // fallback đọc ô text nên không được ngốn cả pageTimeoutMs ở đây.
+  report('Đang đọc clipboard…')
+  const deadline = Date.now() + Math.min(settings.pageTimeoutMs, CLIPBOARD_TIMEOUT_MS * 2)
+  while (Date.now() < deadline) {
+    const clip = await readClipboard(page)
+    if (clip && clip !== sentinel && /^https?:\/\//i.test(clip)) {
+      clipboardFails = 0
+      return clip
+    }
+    await sleep(300)
+  }
+
+  clipboardFails++
+  report('Clipboard không trả về link.')
+  if (!clipboardUsable()) {
+    report('Clipboard không dùng được — từ giờ chỉ đọc link trong ô text.')
+  }
+  return ''
 }
 
 // Đọc value của 1 textarea (dùng cho giao diện mới: link nằm sẵn trong ô text).
@@ -138,12 +220,14 @@ async function readTextareaValue(page: Page, selector: string): Promise<string> 
   const val = (await page
     .locator(selector)
     .first()
-    .inputValue()
+    .inputValue({ timeout: READ_TIMEOUT_MS })
     .catch(() => '')) as string
   return (val ?? '').trim()
 }
 
 // Chờ link xuất hiện trong textarea (spinner tắt + value là URL), tối đa timeoutMs.
+// Dừng sớm nếu textarea không tồn tại: SiteStripe giao diện mới có thể không có ô text nào,
+// khi đó vòng lặp chỉ tốn thời gian vô ích cho tới hết pageTimeoutMs.
 async function waitLinkInTextarea(
   page: Page,
   selector: string,
@@ -151,6 +235,7 @@ async function waitLinkInTextarea(
 ): Promise<string> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
+    if (!(await exists(page, selector))) return ''
     const spinning = await isShown(page, SEL_LINK_SPINNER)
     const val = await readTextareaValue(page, selector)
     if (!spinning && /^https?:\/\//i.test(val)) return val
@@ -168,23 +253,57 @@ async function isInnerGetLinkEnabled(page: Page): Promise<boolean> {
     (await page
       .locator(SEL_INNER_GET_LINK_BOX)
       .first()
-      .getAttribute('class')
+      .getAttribute('class', { timeout: READ_TIMEOUT_MS })
       .catch(() => '')) ?? ''
   if (/a-button-disabled/.test(boxClass)) return false
   const disabled = await page
     .locator(SEL_INNER_GET_LINK)
     .first()
-    .isDisabled()
+    .isDisabled({ timeout: READ_TIMEOUT_MS })
     .catch(() => false)
   return !disabled
 }
 
-// Xử lý 1 dòng: mở link Amazon -> Get Link -> tracking/short/full -> copy link + caption.
+// Đọc tên sản phẩm trên trang chi tiết Amazon (biến {title} cho prompt AI).
+// Thử lần lượt các selector; fallback cuối là <title> của trang (đã cắt hậu tố "- Amazon.com").
+async function readProductTitle(page: Page): Promise<string> {
+  for (const sel of SEL_PRODUCT_TITLE) {
+    const text = (await page
+      .locator(sel)
+      .first()
+      .innerText({ timeout: READ_TIMEOUT_MS })
+      .catch(() => '')) as string
+    const cleaned = (text ?? '').replace(/\s+/g, ' ').trim()
+    if (cleaned) return cleaned
+  }
+  const docTitle = ((await page.title().catch(() => '')) || '').replace(/\s+/g, ' ').trim()
+  return docTitle
+    .replace(/\s*[:|-]\s*Amazon\.[a-z.]+.*$/i, '')
+    .replace(/^Amazon\.[a-z.]+\s*[:|-]\s*/i, '')
+    .trim()
+}
+
+// Xử lý 1 dòng: mở link Amazon -> bóc tên sản phẩm -> Get Link -> tracking/short/full -> lấy link.
+// Caption KHÔNG còn lấy từ SiteStripe (Amazon đã bỏ Caption Generator) — BatchRunner sẽ gọi AI
+// sinh caption từ productTitle trả về ở đây.
 export async function processOne(
   context: BrowserContext,
   url: string,
   settings: AppSettings,
   report: StepReporter = noop
+): Promise<RowResult> {
+  // Giữ tên sản phẩm ngoài luồng return để mọi nhánh lỗi vẫn báo được về N8N.
+  const info: { productTitle: string } = { productTitle: '' }
+  const result = await runOne(context, url, settings, report, info)
+  return info.productTitle ? { ...result, productTitle: info.productTitle } : result
+}
+
+async function runOne(
+  context: BrowserContext,
+  url: string,
+  settings: AppSettings,
+  report: StepReporter,
+  info: { productTitle: string }
 ): Promise<RowResult> {
   const page = context.pages()[0] ?? (await context.newPage())
 
@@ -209,6 +328,11 @@ export async function processOne(
   }
 
   await sleep(settings.delayMs)
+
+  // 1b. Bóc tên sản phẩm ngay khi trang vừa load (dùng cho prompt AI). Không có tên -> không
+  // coi là lỗi dòng, AI sẽ nhận title rỗng và BatchRunner sẽ báo captionError.
+  report('Đang đọc tên sản phẩm…')
+  info.productTitle = await readProductTitle(page)
 
   // 2. Tìm SiteStripe Bar (chỉ hiện khi đã đăng nhập Associates).
   report('Đang tìm SiteStripe Bar…')
@@ -256,12 +380,14 @@ export async function processOne(
     report('Đang chọn Tracking ID…')
     const dd = page.locator(SEL_TRACKING_SELECT).first()
     const ok = await dd
-      .selectOption(settings.trackingId)
+      .selectOption(settings.trackingId, { timeout: READ_TIMEOUT_MS })
       .then(() => true)
       .catch(() => false)
     if (!ok) {
       // Thử theo label nếu value không khớp.
-      await dd.selectOption({ label: settings.trackingId }).catch(() => {})
+      await dd
+        .selectOption({ label: settings.trackingId }, { timeout: READ_TIMEOUT_MS })
+        .catch(() => {})
     }
     await sleep(settings.delayMs)
   }
@@ -290,15 +416,8 @@ export async function processOne(
   const linkTextarea = wantFull ? SEL_FULL_TEXTAREA : SEL_SHORT_TEXTAREA
   let affiliateLink = ''
 
-  if (await exists(page, SEL_COPY_LINK)) {
-    if (await robustClick(page, SEL_COPY_LINK)) {
-      await sleep(settings.delayMs)
-      affiliateLink = await readClipboard(page)
-      if (!affiliateLink) {
-        await sleep(settings.delayMs)
-        affiliateLink = await readClipboard(page)
-      }
-    }
+  if (clipboardUsable() && (await exists(page, SEL_COPY_LINK))) {
+    affiliateLink = await copyLinkViaClipboard(page, settings, report)
   }
 
   // Fallback (giao diện mới): đọc link trong ô textarea theo loại link đã chọn.
@@ -311,50 +430,6 @@ export async function processOne(
     return { ok: false, error: 'NO_LINK_TEXT', step: 'Không lấy được link (nút copy lẫn textarea)' }
   }
 
-  // 8. Caption generator: mở expander -> chờ hết spinner -> bấm "Copy caption" -> đọc clipboard.
-  report('Đang lấy caption…')
-  let caption = ''
-  if (await exists(page, SEL_CAPTION_EXPANDER)) {
-    const expanded =
-      (await page
-        .locator(SEL_CAPTION_EXPANDER)
-        .getAttribute('aria-expanded')
-        .catch(() => null)) === 'true'
-    if (!expanded) {
-      await robustClick(page, SEL_CAPTION_EXPANDER)
-    }
-    await sleep(settings.delayMs)
-
-    // Nếu caption không khả dụng cho sản phẩm này -> để trống, không coi là lỗi cả dòng.
-    if (await isShown(page, SEL_CAPTION_SAFETY)) {
-      caption = ''
-    } else {
-      // Chờ caption sinh xong: spinner tắt VÀ textarea có nội dung (tối đa pageTimeoutMs).
-      const deadline = Date.now() + settings.pageTimeoutMs
-      let ready = false
-      while (Date.now() < deadline) {
-        const spinning = await isShown(page, SEL_CAPTION_SPINNER)
-        const val = (await page
-          .locator(SEL_CAPTION_TEXTAREA)
-          .first()
-          .inputValue()
-          .catch(() => '')) as string
-        if (!spinning && val.trim()) {
-          caption = val.trim()
-          ready = true
-          break
-        }
-        await sleep(600)
-      }
-      // Ưu tiên lấy caption qua nút "Copy caption" -> clipboard (đáng tin hơn đọc textarea).
-      if (ready && (await exists(page, SEL_CAPTION_COPY))) {
-        await robustClick(page, SEL_CAPTION_COPY)
-        await sleep(settings.delayMs)
-        const clip = await readClipboard(page)
-        if (clip) caption = clip
-      }
-    }
-  }
-
-  return { ok: true, affiliateLink, caption }
+  // Caption do AI của app sinh ở BatchRunner, không lấy từ SiteStripe nữa.
+  return { ok: true, affiliateLink }
 }

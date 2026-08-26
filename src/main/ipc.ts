@@ -4,6 +4,7 @@ import { getAllSettings, saveSettings, getRecentSubreddits } from './db/settings
 import { listLogs, clearLogs } from './db/logs'
 import { browserManager } from './browser/BrowserManager'
 import { testWebhook, fetchSource, fetchAsin } from './n8n/N8nConnector'
+import { testAi } from './ai/CaptionGenerator'
 import { runBatch, stopBatch } from './runner/BatchRunner'
 
 // Broadcast trạng thái browser (đóng cửa sổ thủ công…) tới renderer.
@@ -36,6 +37,9 @@ export function registerIpc(): void {
 
   // ---- Webhook test ----
   ipcMain.handle(IpcChannels.webhookTest, () => testWebhook())
+
+  // ---- Test cấu hình AI sinh caption ----
+  ipcMain.handle(IpcChannels.aiTest, (_e, sampleTitle?: string) => testAi(sampleTitle))
 
   // ---- Lấy nguồn (subreddit) ----
   ipcMain.handle(IpcChannels.sourceFetch, (_e, subreddit: string) => fetchSource(subreddit))

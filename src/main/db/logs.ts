@@ -9,6 +9,7 @@ interface LogRow {
   url: string | null
   affiliate_link: string | null
   caption: string | null
+  product_title: string | null
   error: string | null
   step: string | null
 }
@@ -21,6 +22,7 @@ function toLog(r: LogRow): LogEntry {
     url: r.url,
     affiliateLink: r.affiliate_link,
     caption: r.caption,
+    productTitle: r.product_title ?? null,
     error: r.error,
     step: r.step
   }
@@ -29,8 +31,8 @@ function toLog(r: LogRow): LogEntry {
 export function insertLog(entry: Omit<LogEntry, 'id'>): void {
   getDb()
     .prepare(
-      `INSERT INTO logs (ts, ok, url, affiliate_link, caption, error, step)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO logs (ts, ok, url, affiliate_link, caption, product_title, error, step)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       entry.ts,
@@ -38,6 +40,7 @@ export function insertLog(entry: Omit<LogEntry, 'id'>): void {
       entry.url,
       entry.affiliateLink,
       entry.caption,
+      entry.productTitle,
       entry.error,
       entry.step
     )

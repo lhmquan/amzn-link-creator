@@ -38,6 +38,9 @@ const api: AmznApi = {
   webhook: {
     test: () => ipcRenderer.invoke(IpcChannels.webhookTest)
   },
+  ai: {
+    test: (sampleTitle?: string) => ipcRenderer.invoke(IpcChannels.aiTest, sampleTitle)
+  },
   source: {
     fetch: (subreddit: string) => ipcRenderer.invoke(IpcChannels.sourceFetch, subreddit),
     recents: () => ipcRenderer.invoke(IpcChannels.sourceRecents)

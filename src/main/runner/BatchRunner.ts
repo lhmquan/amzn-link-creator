@@ -4,7 +4,8 @@ import { getAllSettings } from '../db/settings'
 import { insertLog, pruneLogs } from '../db/logs'
 import { fetchRows, reportRow } from '../n8n/N8nConnector'
 import { browserManager } from '../browser/BrowserManager'
-import { processOne } from '../actions/AmazonActions'
+import { processOne, resetClipboardState } from '../actions/AmazonActions'
+import { generateCaption } from '../ai/CaptionGenerator'
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
@@ -43,6 +44,22 @@ function extractUrl(row: Record<string, unknown>, linkColumn: string): string | 
   return null
 }
 
+// Gộp các nguồn lỗi của 1 dòng thành 1 chuỗi cho cột lỗi trong nhật ký.
+// Lỗi caption AI (captionError) chỉ là cảnh báo phụ: dòng vẫn tính là thành công.
+// Không có lỗi nào -> null để cột lỗi trong nhật ký hiển thị trống.
+export function buildLogError(
+  result: RowResult,
+  rep: { ok: boolean; error?: string }
+): string | null {
+  const parts: string[] = []
+  if (!result.ok) {
+    parts.push(`${result.error ?? 'lỗi'}${result.step ? ` (${result.step})` : ''}`)
+  }
+  if (!rep.ok) parts.push(`report lỗi: ${rep.error}`)
+  if (result.captionError) parts.push(`caption AI lỗi: ${result.captionError}`)
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
 // Pipeline batch dùng chung cho nút "Bắt đầu".
 export async function runBatch(): Promise<BatchSummary> {
   if (running) {
@@ -50,6 +67,8 @@ export async function runBatch(): Promise<BatchSummary> {
   }
   running = true
   stopRequested = false
+  // Trạng thái clipboard là của riêng từng lần chạy (cửa sổ/profile có thể đã khác).
+  resetClipboardState()
 
   const settings = getAllSettings()
   let openedByUs = false
@@ -129,6 +148,38 @@ export async function runBatch(): Promise<BatchSummary> {
         }
       }
 
+      // 3b. Sinh caption bằng AI (Amazon đã bỏ Caption Generator trên SiteStripe).
+      // Chỉ chạy khi dòng lấy link thành công. Lỗi AI ghi vào captionError, KHÔNG làm dòng thất bại.
+      if (result.ok && settings.aiEnabled) {
+        emitProgress({
+          stage: 'process',
+          message: 'Đang sinh caption bằng AI…',
+          busy: true,
+          current: i + 1,
+          total,
+          okCount,
+          errCount
+        })
+        const ai = await generateCaption(
+          { title: result.productTitle ?? '', url: url ?? '', link: result.affiliateLink ?? '' },
+          settings
+        )
+        if (ai.ok) {
+          result = { ...result, caption: ai.caption }
+        } else {
+          result = { ...result, captionError: ai.error }
+          emitProgress({
+            stage: 'process',
+            message: `Caption AI lỗi: ${ai.error}`,
+            busy: true,
+            current: i + 1,
+            total,
+            okCount,
+            errCount
+          })
+        }
+      }
+
       // 4. Báo kết quả về N8N + ghi nhật ký.
       const rep = await reportRow(row, result)
       insertLog({
@@ -137,11 +188,8 @@ export async function runBatch(): Promise<BatchSummary> {
         url: url ?? null,
         affiliateLink: result.affiliateLink ?? null,
         caption: result.caption ?? null,
-        error: result.ok
-          ? rep.ok
-            ? null
-            : `report lỗi: ${rep.error}`
-          : `${result.error ?? 'lỗi'}${result.step ? ` (${result.step})` : ''}${rep.ok ? '' : ` · report lỗi: ${rep.error}`}`,
+        productTitle: result.productTitle ?? null,
+        error: buildLogError(result, rep),
         step: result.step ?? null
       })
       if (result.ok) okCount++

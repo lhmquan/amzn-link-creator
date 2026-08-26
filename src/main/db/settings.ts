@@ -16,7 +16,24 @@ const DEFAULTS: AppSettings = {
   delayMs: 1500,
   rowDelayMs: 3000,
   pageTimeoutMs: 30000,
-  logRetentionDays: 30
+  logRetentionDays: 30,
+
+  // AI sinh caption (tương thích OpenAI). Mặc định tắt để app cũ chạy như trước.
+  aiEnabled: false,
+  aiBaseUrl: 'https://api.openai.com/v1',
+  aiModel: 'gpt-4o-mini',
+  aiApiKey: '',
+  aiMaxLength: 280,
+  aiPrompt:
+    'Viết một caption tiếng Việt hấp dẫn để đăng mạng xã hội cho sản phẩm Amazon sau:\n{title}\n\nYêu cầu: giọng thân thiện, nêu 1-2 lợi ích chính, kèm 2-3 hashtag phù hợp. Tối đa {maxLength} ký tự. Chỉ trả về nội dung caption, không thêm giải thích, không thêm dấu ngoặc kép.',
+  aiTimeoutMs: 60000
+}
+
+// Đọc số từ KV, trả về fallback nếu thiếu hoặc không phải số hợp lệ.
+function num(map: Map<string, string>, key: string, fallback: number): number {
+  if (!map.has(key)) return fallback
+  const n = Number(map.get(key))
+  return Number.isFinite(n) ? n : fallback
 }
 
 export function getAllSettings(): AppSettings {
@@ -37,14 +54,19 @@ export function getAllSettings(): AppSettings {
     trackingId: map.get('trackingId') ?? DEFAULTS.trackingId,
     linkType: map.get('linkType') === 'full' ? 'full' : DEFAULTS.linkType,
     headless: map.has('headless') ? map.get('headless') === 'true' : DEFAULTS.headless,
-    delayMs: map.has('delayMs') ? Number(map.get('delayMs')) : DEFAULTS.delayMs,
-    rowDelayMs: map.has('rowDelayMs') ? Number(map.get('rowDelayMs')) : DEFAULTS.rowDelayMs,
-    pageTimeoutMs: map.has('pageTimeoutMs')
-      ? Number(map.get('pageTimeoutMs'))
-      : DEFAULTS.pageTimeoutMs,
-    logRetentionDays: map.has('logRetentionDays')
-      ? Number(map.get('logRetentionDays'))
-      : DEFAULTS.logRetentionDays
+    delayMs: num(map, 'delayMs', DEFAULTS.delayMs),
+    rowDelayMs: num(map, 'rowDelayMs', DEFAULTS.rowDelayMs),
+    pageTimeoutMs: num(map, 'pageTimeoutMs', DEFAULTS.pageTimeoutMs),
+    logRetentionDays: num(map, 'logRetentionDays', DEFAULTS.logRetentionDays),
+
+    aiEnabled: map.has('aiEnabled') ? map.get('aiEnabled') === 'true' : DEFAULTS.aiEnabled,
+    aiBaseUrl: map.get('aiBaseUrl') ?? DEFAULTS.aiBaseUrl,
+    aiModel: map.get('aiModel') ?? DEFAULTS.aiModel,
+    aiApiKey: map.get('aiApiKey') ?? DEFAULTS.aiApiKey,
+    aiMaxLength: num(map, 'aiMaxLength', DEFAULTS.aiMaxLength),
+    // Prompt có thể được user cố ý để trống -> tôn trọng chuỗi rỗng đã lưu.
+    aiPrompt: map.has('aiPrompt') ? (map.get('aiPrompt') as string) : DEFAULTS.aiPrompt,
+    aiTimeoutMs: num(map, 'aiTimeoutMs', DEFAULTS.aiTimeoutMs)
   }
 }
 

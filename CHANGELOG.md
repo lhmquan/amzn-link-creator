@@ -2,6 +2,28 @@
 
 Tất cả thay đổi đáng chú ý của AMZN LINK CREATOR được ghi tại đây.
 
+## [0.5.0] - 2026-08-26
+
+### Thay đổi lớn
+- **Bỏ hẳn Caption Generator của SiteStripe**: Amazon đã gỡ tính năng này khỏi popover "Share affiliate link". App không còn mở expander, chờ spinner hay bấm "Copy caption" nữa.
+- **Sinh caption bằng AI (tương thích OpenAI)**: cấu hình trong Cài đặt → "AI sinh caption" gồm Base URL, Model, API Key, giới hạn độ dài caption, timeout và prompt tự do. Gọi `POST {baseUrl}/chat/completions` với header `Authorization: Bearer`; tự thêm `/v1` nếu chỉ nhập host và giữ nguyên query string. Mặc định TẮT để bản cũ chạy y như trước cho tới khi bạn cấu hình.
+- **Biến trong prompt**: `{title}` tên sản phẩm bóc từ trang Amazon, `{url}` link Amazon gốc, `{link}` affiliate link vừa tạo, `{maxLength}` giới hạn ký tự.
+- **Nút "Test AI"**: gọi thật API với tên sản phẩm mẫu (hoặc tên bạn tự nhập) và xem trước caption ngay trong Cài đặt, không cần chạy batch.
+- **Bóc tên sản phẩm**: đọc `#productTitle` với các selector dự phòng, fallback cuối là `<title>` của trang (đã cắt tiền tố/hậu tố `Amazon.com`). Tên sản phẩm được gửi kèm về N8N (`productTitle`) và hiện trong cột "Sản phẩm" của Nhật ký.
+
+### Sửa lỗi
+- **Đứng hàng chục giây rồi bỏ qua dòng**: `page.evaluate` không có timeout mặc định, nên `navigator.clipboard.readText()` treo vô hạn khi cửa sổ Chrome mất focus (chế độ headful). Mọi thao tác clipboard giờ bọc timeout 3 giây.
+- **Quyền clipboard cấp sai origin**: trước đây chỉ cấp cho `https://www.amazon.com`, nên `readText()` bị `NotAllowedError` khi Amazon chuyển hướng sang tên miền khác. Giờ cấp cho mọi origin của profile.
+- **Mọi phép đọc DOM có timeout tường minh 2 giây**: Playwright mặc định chờ 30 giây khi selector không tồn tại (đã đo: `inputValue`, `getAttribute`, `isDisabled`, `selectOption` đều treo đúng 30.0s). SiteStripe đổi giao diện thường xuyên nên đây là nguồn treo chính.
+- **Chống gán link của dòng trước**: ghi một giá trị mốc vào clipboard trước khi bấm "Copy affiliate link", chỉ nhận giá trị khác mốc và là URL `http(s)`. Trước đây nếu Copy thất bại, clipboard còn giữ link dòng trước và app gán sai link cho dòng hiện tại.
+- **Bỏ qua clipboard sau 3 lần thất bại liên tiếp** trong cùng một lần chạy, chỉ đọc link trong ô text — tiết kiệm vài giây mỗi dòng.
+- **Dừng sớm khi không có ô text**: `waitLinkInTextarea` thoát ngay nếu textarea không tồn tại thay vì quét hết timeout tải trang.
+
+### Cải tiến
+- **Lỗi AI không làm dòng thất bại**: caption lỗi được báo riêng qua `captionError`, dòng vẫn tính thành công và affiliate link vẫn được gửi về N8N. Nhật ký ghi cảnh báo "caption AI lỗi: …".
+- **Nhật ký chi tiết hơn khi lấy link**: thêm các bước "Đang đặt mốc clipboard…", "Đang bấm Copy affiliate link…", "Đang đọc clipboard…" để biết chính xác kẹt ở đâu.
+- **Payload gửi N8N thêm `productTitle` và `captionError`**; DB thêm cột `product_title` (migration idempotent, dữ liệu cũ giữ nguyên).
+
 ## [0.4.1] - 2026-07-10
 
 ### Sửa lỗi

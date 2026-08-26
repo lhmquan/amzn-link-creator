@@ -19,13 +19,27 @@ export interface AppSettings {
   rowDelayMs: number // delay giữa các dòng
   pageTimeoutMs: number // timeout chờ trang Amazon load
   logRetentionDays: number // số ngày giữ nhật ký
+
+  // ---- AI sinh caption (tương thích OpenAI) ----
+  aiEnabled: boolean // bật/tắt sinh caption bằng AI
+  aiBaseUrl: string // base URL API, vd 'https://api.openai.com/v1'
+  aiModel: string // tên model, vd 'gpt-4o-mini'
+  aiApiKey: string // Bearer token
+  aiMaxLength: number // giới hạn số ký tự của caption (0 = không giới hạn)
+  aiPrompt: string // prompt người dùng, hỗ trợ biến {title} {url} {link} {maxLength}
+  aiTimeoutMs: number // timeout gọi API AI
 }
+
+// Biến được phép dùng trong aiPrompt (thay thế trước khi gửi cho AI).
+export const AI_PROMPT_VARS = ['{title}', '{url}', '{link}', '{maxLength}'] as const
 
 // Kết quả xử lý 1 dòng.
 export interface RowResult {
   ok: boolean
   affiliateLink?: string
   caption?: string
+  productTitle?: string // tên sản phẩm bóc từ trang Amazon (đầu vào cho AI)
+  captionError?: string // lỗi riêng của bước sinh caption (không làm cả dòng thất bại)
   error?: string // mã lỗi ngắn gọn: BROKEN_LINK | NO_GET_LINK | SITESTRIPE_NOT_FOUND | TIMEOUT | NO_URL | ...
   step?: string
 }
@@ -49,6 +63,7 @@ export interface LogEntry {
   url: string | null // link Amazon của dòng
   affiliateLink: string | null
   caption: string | null
+  productTitle: string | null // tên sản phẩm đã bóc được
   error: string | null
   step: string | null
 }
@@ -67,6 +82,14 @@ export interface WebhookTestResult {
   ok: boolean
   status?: number
   rowCount?: number
+  error?: string
+}
+
+// Kết quả test cấu hình AI: gọi thật API với 1 tên sản phẩm mẫu.
+export interface AiTestResult {
+  ok: boolean
+  caption?: string // caption AI trả về (đã cắt theo aiMaxLength)
+  model?: string // model thực tế API báo lại
   error?: string
 }
 
@@ -126,6 +149,8 @@ export const IpcChannels = {
 
   webhookTest: 'webhook:test',
 
+  aiTest: 'ai:test',
+
   sourceFetch: 'source:fetch',
   sourceRecents: 'source:recents',
 
@@ -164,6 +189,9 @@ export interface AmznApi {
   }
   webhook: {
     test: () => Promise<WebhookTestResult>
+  }
+  ai: {
+    test: (sampleTitle?: string) => Promise<AiTestResult>
   }
   source: {
     fetch: (subreddit: string) => Promise<SourceResult>
